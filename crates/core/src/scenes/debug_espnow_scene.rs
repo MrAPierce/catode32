@@ -14,6 +14,7 @@
 //!   * B: back to the main scene.
 
 use core::fmt::Write as _;
+use crate::transport::Transport;
 
 use embedded_graphics::prelude::Point;
 use heapless::{String, Vec};
@@ -91,8 +92,8 @@ impl DebugEspnowScene {
                 let _ = write!(
                     s,
                     "<{:02x}:{:02x} {}{}{}{} {}",
-                    item.src[4],
-                    item.src[5],
+                    item.src.as_bytes()[4],
+                    item.src.as_bytes()[5],
                     printable(tag_bytes[0]),
                     printable(tag_bytes[1]),
                     printable(tag_bytes[2]),
@@ -188,8 +189,8 @@ impl Scene for DebugEspnowScene {
         let own_mac = ctx
             .espnow
             .as_ref()
-            .and_then(|m| m.own_mac())
-            .map(|m| format_bssid(&m))
+            .and_then(|m| m.own_id())
+            .map(|m| format_bssid(m.as_bytes()))
             .unwrap_or_else(|| {
                 let mut s: String<17> = String::new();
                 let _ = s.push_str("--");

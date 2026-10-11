@@ -35,6 +35,7 @@ use core::fmt::Write as _;
 use embedded_graphics::prelude::Point;
 use heapless::{String, Vec};
 use crate::t;
+use crate::transport::{PeerId, Transport};
 
 use crate::{
     context::{GameContext, VisitRole, VisitState, PET_NAME_MAX},
@@ -56,7 +57,7 @@ const MAX_NEARBY: usize = 5;
 const LINE_HEIGHT: i32 = 8;
 const LINES_VISIBLE: usize = 5;
 
-type MacAddr = [u8; 6];
+type MacAddr = PeerId;
 
 #[derive(Clone)]
 struct NearbyEntry {

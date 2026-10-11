@@ -25,6 +25,15 @@ c3 = [
     "esp-rtos/esp32c3",
 ]
 
+h2 = [
+    "catode32-core/h2",
+    "esp-hal/esp32h2",
+    "esp-backtrace/esp32h2",
+    "esp-println/esp32h2",
+    "esp-bootloader-esp-idf/esp32h2",
+    "esp-rtos/esp32h2",
+]
+
 # Language selection — pass-through to core. Exactly one should be active.
 lang-en = ["catode32-core/lang-en"]
 lang-de = ["catode32-core/lang-de"]

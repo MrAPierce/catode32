@@ -1,3 +1,4 @@
+use crate::transport::Transport;
 use crate::platform::{
     persist, watchdog,
     power::software_reset,
@@ -421,14 +422,22 @@ impl Game {
     fn enter_deep_sleep(&mut self) -> ! {
         use esp_hal::{
             gpio::{Event, Input, InputConfig, Pull, WakeupConfig},
-            peripherals::{GPIO0, GPIO1, GPIO2, GPIO3, LPWR},
+            peripherals::LPWR,
             rtc_cntl::sleep::{LowPower, RtcSleepConfig},
         };
+        #[cfg(not(feature = "h2"))]
+        use esp_hal::peripherals::{GPIO0, GPIO1, GPIO2, GPIO3};
+        #[cfg(feature = "h2")]
+        use esp_hal::peripherals::{GPIO10, GPIO11, GPIO12};
 
         use crate::{input::Button, sleep_manager::wait_buttons_stable_released_mask};
 
+        #[cfg(not(feature = "h2"))]
         const DEEP_WAKE_BUTTONS: [Button; 4] =
             [Button::A, Button::B, Button::Menu1, Button::Menu2];
+        // H2 deep-sleep wake works only on GPIO7-14, so Menu2 (GPIO2) is out.
+        #[cfg(feature = "h2")]
+        const DEEP_WAKE_BUTTONS: [Button; 3] = [Button::A, Button::B, Button::Menu1];
 
         println!("[Power] Entering deep sleep");
         self.renderer.clear();
@@ -447,11 +456,18 @@ impl Game {
         // Safety: deep sleep is one-way; on wake the device boots from reset
         // and the old `Input` wrappers in `Buttons` will never be used again.
         let input_config = InputConfig::default().with_pull(Pull::Up);
+        #[cfg(not(feature = "h2"))]
         let mut pins = [
             Input::new(unsafe { GPIO0::steal() }, input_config),
             Input::new(unsafe { GPIO1::steal() }, input_config),
             Input::new(unsafe { GPIO2::steal() }, input_config),
             Input::new(unsafe { GPIO3::steal() }, input_config),
+        ];
+        #[cfg(feature = "h2")]
+        let mut pins = [
+            Input::new(unsafe { GPIO12::steal() }, input_config),
+            Input::new(unsafe { GPIO11::steal() }, input_config),
+            Input::new(unsafe { GPIO10::steal() }, input_config),
         ];
 
         // Sleep entry copies these pull-ups onto the LP-IO pads before it

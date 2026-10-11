@@ -1,5 +1,6 @@
 use embedded_graphics::prelude::Point;
 use crate::t;
+use crate::transport::{PeerId, Transport};
 
 use crate::{
     assets::character::PoseId,
@@ -394,7 +395,7 @@ impl LocationScene {
         }
     }
 
-    fn broadcast_vst(&mut self, ctx: &mut GameContext, peer_mac: [u8; 6], dt: f32) {
+    fn broadcast_vst(&mut self, ctx: &mut GameContext, peer_mac: PeerId, dt: f32) {
         let cur_x = self.character.pos.x;
         let cur_pose = self.character.pose_id;
         let cur_mirror = self.character.mirror_h;
@@ -435,7 +436,7 @@ impl LocationScene {
         self.vst_heartbeat = 0.0;
     }
 
-    fn broadcast_vbeh_on_change(&mut self, ctx: &mut GameContext, peer_mac: [u8; 6]) {
+    fn broadcast_vbeh_on_change(&mut self, ctx: &mut GameContext, peer_mac: PeerId) {
         let cur = self.behaviors.current_id();
         if Some(cur) == self.last_vbeh {
             return;
@@ -453,7 +454,7 @@ impl LocationScene {
     fn maybe_proximity_sniff(
         &mut self,
         ctx: &mut GameContext,
-        peer_mac: [u8; 6],
+        peer_mac: PeerId,
         role: crate::context::VisitRole,
         dt: f32,
     ) {

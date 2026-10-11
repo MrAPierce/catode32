@@ -25,11 +25,12 @@
 //! an active session the refcount keeps the radio up through the scan
 //! and the release only decrements.
 
+#![cfg_attr(any(feature = "h2", feature = "desktop"), allow(dead_code, unused_imports))]
+
 use crate::platform::time::Duration;
 use heapless::Vec;
 
 use crate::context::{GameContext, WIFI_SSID_MAX};
-#[cfg(not(feature = "desktop"))]
 use crate::context::{WifiEntry, WIFI_FAMILIAR_MAX, WIFI_RECENT_MAX};
 
 #[cfg(not(feature = "desktop"))]
@@ -43,11 +44,35 @@ pub const SCAN_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const SCAN_MAX_APS: usize = 20;
 
 /// Count subtracted from every unseen entry each scan.
-#[cfg(not(feature = "desktop"))]
 const DECAY_PER_SCAN: f32 = 0.25;
 /// Min count before a recent entry can be promoted.
-#[cfg(not(feature = "desktop"))]
 const PROMOTE_MIN: f32 = 5.0;
+
+/// Familiar entries that must be visible to count as "home". WiFi keeps the
+/// original any-one-AP behaviour.
+pub const WIFI_QUORUM: usize = 1;
+
+/// A source of location fingerprints (WiFi APs, BLE devices, ...). Entries
+/// reuse [`ScanAp`]: `bssid` holds the 6-byte address and `ssid` an optional
+/// short name.
+pub trait LocationSensor {
+    /// Minimum visible familiar entries needed to be "at home".
+    fn quorum(&self) -> usize;
+    /// Run one scan and update the context; `None` if the radio is unavailable.
+    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>>;
+}
+
+/// WiFi access-point sensor used on C3/C6.
+pub struct WifiSensor;
+
+impl LocationSensor for WifiSensor {
+    fn quorum(&self) -> usize {
+        WIFI_QUORUM
+    }
+    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+        scan_now(ctx)
+    }
+}
 
 /// Snapshot of the latest scan, surfaced to the debug scene so it can show
 /// signal strength + auth mode alongside the familiar/recent lists.
@@ -62,7 +87,7 @@ pub struct ScanAp {
 /// runs the scan, releases, and updates `wifi_familiar` /
 /// `wifi_recent` / `in_familiar_location`. On desktop there is no
 /// radio; the call returns `None` and leaves the state untouched.
-#[cfg(not(feature = "desktop"))]
+#[cfg(not(any(feature = "desktop", feature = "h2")))]
 pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
     use embassy_futures::block_on;
 
@@ -82,7 +107,7 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
     };
     radio::release(ctx);
 
-    process(ctx, &aps);
+    process(ctx, &aps, WIFI_QUORUM);
 
     println!(
         "[WiFi] Scan done. familiar={} ({}/{} known)",
@@ -98,7 +123,98 @@ pub fn scan_now(_ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
     None
 }
 
-#[cfg(not(feature = "desktop"))]
+/// Length of one passive BLE scan.
+#[cfg(feature = "h2")]
+const BLE_SCAN_MS: u64 = 3000;
+
+#[cfg(feature = "h2")]
+struct Collector {
+    seen: core::cell::RefCell<Vec<ScanAp, 32>>,
+}
+
+#[cfg(feature = "h2")]
+impl trouble_host::prelude::EventHandler for Collector {
+    fn on_adv_reports(&self, reports: bt_hci::param::LeAdvReportsIter) {
+        let batch = reports.filter_map(|r| r.ok()).filter_map(|r| {
+            let addr: [u8; 6] = r.addr.raw().try_into().ok()?;
+            Some((r.addr_kind.as_raw(), addr, r.rssi, r.data))
+        });
+        let kept = crate::ble_filter::filter_reports(batch);
+        {
+            let mut seen = self.seen.borrow_mut();
+            for ap in kept {
+                if let Some(e) = seen.iter_mut().find(|e| e.bssid == ap.bssid) {
+                    if ap.rssi > e.rssi {
+                        e.rssi = ap.rssi;
+                    }
+                } else if !seen.is_full() {
+                    let _ = seen.push(ap);
+                }
+            }
+        }
+    }
+}
+
+/// One passive BLE scan. Brings the controller up, listens for
+/// `BLE_SCAN_MS`, then drops it (which powers the radio down).
+#[cfg(feature = "h2")]
+pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+    use crate::platform::radio::WIFI;
+    use embassy_futures::{block_on, select::select};
+    use esp_radio::ble::controller::BleConnector;
+    use trouble_host::prelude::*;
+
+    let bt = ctx.wifi_peripheral.take()?;
+    let connector = match BleConnector::new(bt, Default::default()) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("[BLE] init failed: {:?}", e);
+            ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+            return None;
+        }
+    };
+
+    let collector = Collector {
+        seen: core::cell::RefCell::new(Vec::new()),
+    };
+    {
+        let controller: bt_hci::controller::ExternalController<_, 4> =
+            bt_hci::controller::ExternalController::new(connector);
+        let mut resources: HostResources<_, trouble_host::prelude::DefaultPacketPool, 0, 0> = HostResources::new();
+        let stack = trouble_host::new(controller, &mut resources).build();
+        let mut runner = stack.runner();
+        let mut scanner = Scanner::new(stack.central());
+        let config = ScanConfig {
+            active: false,
+            interval: embassy_time::Duration::from_millis(100),
+            window: embassy_time::Duration::from_millis(100),
+            ..Default::default()
+        };
+        let work = async {
+            let _session = scanner.scan(&config).await.ok()?;
+            embassy_time::Timer::after_millis(BLE_SCAN_MS).await;
+            Some(())
+        };
+        let done = block_on(select(runner.run_with_handler(&collector), work));
+        if let embassy_futures::select::Either::First(Err(_)) = done {
+            println!("[BLE] runner error");
+        }
+    }
+    ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+
+    let aps = collector.seen.borrow().clone();
+    process(ctx, &aps, crate::ble_filter::BLE_QUORUM);
+    println!(
+        "[BLE] Scan done. {} beacons, familiar={} ({}/{} known)",
+        aps.len(),
+        ctx.in_familiar_location,
+        ctx.wifi_familiar.len(),
+        WIFI_FAMILIAR_MAX,
+    );
+    Some(aps)
+}
+
+#[cfg(not(any(feature = "desktop", feature = "h2")))]
 async fn perform_scan(
     controller: &mut esp_radio::wifi::WifiController<'static>,
 ) -> Result<Vec<ScanAp, 32>, esp_radio::wifi::WifiError> {
@@ -135,8 +251,8 @@ async fn perform_scan(
 
 /// Decay-and-promote algorithm. Public so the debug scene's "Scan" button
 /// (or a unit test, eventually) can drive it with a synthesized AP list.
-#[cfg(not(feature = "desktop"))]
-fn process(ctx: &mut GameContext, aps: &[ScanAp]) {
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
     // Decay unseen entries, then prune the ones that hit zero.
     for entry in ctx.wifi_familiar.iter_mut() {
         if !aps.iter().any(|ap| ap.bssid == entry.bssid) {
@@ -214,10 +330,11 @@ fn process(ctx: &mut GameContext, aps: &[ScanAp]) {
     ctx.in_familiar_location = ctx
         .wifi_familiar
         .iter()
-        .any(|e| aps.iter().any(|ap| ap.bssid == e.bssid));
+        .filter(|e| aps.iter().any(|ap| ap.bssid == e.bssid))
+        .count()
+        >= quorum.max(1);
 }
 
-#[cfg(not(feature = "desktop"))]
 fn lowest_idx<const N: usize>(v: &Vec<WifiEntry, N>) -> Option<usize> {
     let mut best: Option<(usize, f32)> = None;
     for (i, e) in v.iter().enumerate() {

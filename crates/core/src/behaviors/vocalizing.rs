@@ -1,4 +1,5 @@
 use embedded_graphics::prelude::Point;
+use crate::transport::Transport;
 
 use crate::{
     assets::character::PoseId,

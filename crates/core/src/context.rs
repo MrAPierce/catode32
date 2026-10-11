@@ -112,7 +112,7 @@ pub enum VisitRole {
 /// across scene transitions so the visit runtime keeps receiving.
 #[derive(Clone)]
 pub struct VisitState {
-    pub peer_mac: [u8; 6],
+    pub peer_mac: crate::transport::PeerId,
     pub peer_name: heapless::String<PET_NAME_MAX>,
     pub role: VisitRole,
     /// Wall-clock seconds the visit has been running. Bumped each
