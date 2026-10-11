@@ -12,6 +12,7 @@
 
 #![allow(dead_code)]
 
+#[cfg(not(feature = "h2"))]
 use heapless::Vec;
 
 use crate::{
@@ -224,7 +225,7 @@ mod firmware {
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
 pub use firmware::EspNowManager;
 
-#[cfg(any(feature = "desktop", feature = "h2"))]
+#[cfg(all(feature = "desktop", not(feature = "h2")))]
 mod desktop {
     use super::*;
 
@@ -257,8 +258,12 @@ mod desktop {
     }
 }
 
-#[cfg(any(feature = "desktop", feature = "h2"))]
+#[cfg(all(feature = "desktop", not(feature = "h2")))]
 pub use desktop::EspNowManager;
+
+/// The H2 has no WiFi; its "ESP-NOW" transport is BLE.
+#[cfg(feature = "h2")]
+pub use crate::ble_transport::BleManager as EspNowManager;
 
 /// Acquire the radio for ESP-NOW traffic. Scenes call this on `enter`.
 /// On desktop this always returns false (no radio).

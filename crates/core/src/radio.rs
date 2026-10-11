@@ -19,7 +19,7 @@
 //! `release` is a no-op. Code that handles the no-radio case (the
 //! "you've gone offline" branch) keeps working unchanged.
 
-#[cfg(any(feature = "desktop", feature = "h2"))]
+#[cfg(feature = "desktop")]
 use crate::context::GameContext;
 
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
@@ -94,10 +94,62 @@ mod firmware {
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
 pub use firmware::{acquire, release};
 
-#[cfg(any(feature = "desktop", feature = "h2"))]
+#[cfg(feature = "desktop")]
 pub fn acquire(_ctx: &mut GameContext) -> bool {
     false
 }
 
-#[cfg(any(feature = "desktop", feature = "h2"))]
+#[cfg(feature = "desktop")]
 pub fn release(_ctx: &mut GameContext) {}
+
+#[cfg(feature = "h2")]
+mod ble {
+    use esp_hal::peripherals::BT;
+    use esp_radio::ble::controller::BleConnector;
+
+    use crate::context::GameContext;
+    use crate::transport::Transport;
+
+    /// Bring BLE up (or bump the refcount). `true` if usable on exit.
+    pub fn acquire(ctx: &mut GameContext) -> bool {
+        if ctx.radio_users == 0 {
+            let Some(bt) = ctx.wifi_peripheral.take() else {
+                println!("[radio] BT peripheral unavailable");
+                return false;
+            };
+            match BleConnector::new(bt, Default::default()) {
+                Ok(connector) => {
+                    if let Some(m) = ctx.espnow.as_mut() {
+                        m.attach(connector);
+                        m.activate();
+                    }
+                }
+                Err(e) => {
+                    println!("[radio] BLE init failed: {:?}", e);
+                    ctx.wifi_peripheral = Some(unsafe { BT::steal() });
+                    return false;
+                }
+            }
+        }
+        ctx.radio_users = ctx.radio_users.saturating_add(1);
+        true
+    }
+
+    pub fn release(ctx: &mut GameContext) {
+        if ctx.radio_users == 0 {
+            println!("[radio] unbalanced release");
+            return;
+        }
+        ctx.radio_users -= 1;
+        if ctx.radio_users == 0 {
+            if let Some(m) = ctx.espnow.as_mut() {
+                m.deactivate();
+                m.detach();
+            }
+            ctx.wifi_peripheral = Some(unsafe { BT::steal() });
+        }
+    }
+}
+
+#[cfg(feature = "h2")]
+pub use ble::{acquire, release};

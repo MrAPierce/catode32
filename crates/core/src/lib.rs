@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "desktop"), no_std)]
 
+extern crate alloc;
+
 // Cfg-aware `println!`. Firmware routes to `esp_println` (USB serial-jtag /
 // UART per the `auto` backend); desktop uses the std macro. Call sites do
 // `use crate::println;` and then `println!(...)` as normal.
@@ -57,6 +59,7 @@ pub mod time_system;
 pub mod transition;
 pub mod ble_filter;
 pub mod ble_proto;
+pub mod ble_transport;
 pub mod transport;
 pub mod ui;
 pub mod weather_system;
