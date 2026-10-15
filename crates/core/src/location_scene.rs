@@ -198,9 +198,9 @@ impl LocationScene {
         // it here so the same vocalization only goes out once.
         if let Some(name) = ctx.pending_vocalize_broadcast.take() {
             if let Some(icon) = BubbleIcon::from_name(name) {
-                if let Some(espnow) = ctx.espnow.as_mut() {
+                if let Some(peers) = ctx.peers.as_mut() {
                     let frame = espnow_msg::encode_vocalize(icon);
-                    espnow.send_broadcast(&frame);
+                    peers.send_broadcast(&frame);
                 }
             }
         }
@@ -234,14 +234,14 @@ impl LocationScene {
                 self.venv_timer += dt;
                 if self.venv_timer >= VENV_INTERVAL {
                     self.venv_timer = 0.0;
-                    if let Some(espnow) = ctx.espnow.as_mut() {
+                    if let Some(peers) = ctx.peers.as_mut() {
                         let frame = espnow_msg::encode_venv(
                             ctx.time_hours,
                             ctx.time_minutes,
                             espnow_msg::weather_to_wire(ctx.weather),
                             espnow_msg::season_to_wire(ctx.season),
                         );
-                        espnow.send_to(peer_mac, &frame);
+                        peers.send_to(peer_mac, &frame);
                     }
                 }
                 // Sky event sync: any locally-spawned shooting star
@@ -251,7 +251,7 @@ impl LocationScene {
                 if let Some((sx_pos, sy_pos, max_len, vx, vy)) =
                     self.sky.take_just_spawned_shooting_star()
                 {
-                    if let Some(espnow) = ctx.espnow.as_mut() {
+                    if let Some(peers) = ctx.peers.as_mut() {
                         let frame = espnow_msg::encode_vss(
                             sx_pos as i32,
                             sy_pos as i32,
@@ -259,15 +259,15 @@ impl LocationScene {
                             vx as i32,
                             vy as i32,
                         );
-                        espnow.send_to(peer_mac, &frame);
+                        peers.send_to(peer_mac, &frame);
                     }
                 }
                 if let Some((idx, going_right, y, speed)) =
                     self.sky.take_just_spawned_sky_event()
                 {
-                    if let Some(espnow) = ctx.espnow.as_mut() {
+                    if let Some(peers) = ctx.peers.as_mut() {
                         let frame = espnow_msg::encode_vse(idx, going_right, y, speed);
-                        espnow.send_to(peer_mac, &frame);
+                        peers.send_to(peer_mac, &frame);
                     }
                 }
             }
@@ -282,7 +282,7 @@ impl LocationScene {
         // owned vec so the manager borrow ends before we touch other
         // ctx fields (Hearing trigger reads stats, recent_behaviors,
         // etc.).
-        let inbox = match ctx.espnow.as_mut() {
+        let inbox = match ctx.peers.as_mut() {
             Some(m) => m.drain(),
             None => Default::default(),
         };
@@ -422,14 +422,14 @@ impl LocationScene {
         if !(pose_changed || pos_changed || stop_edge || heartbeat) {
             return;
         }
-        let Some(espnow) = ctx.espnow.as_mut() else {
+        let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
         // Ensure the peer is registered for unicast; `start_session`
         // only adds the broadcast peer. Idempotent on repeat calls.
-        espnow.add_peer(peer_mac);
+        peers.add_peer(peer_mac);
         let frame = espnow_msg::encode_vst(cur_x, cur_pose, cur_mirror, vx);
-        espnow.send_to(peer_mac, &frame);
+        peers.send_to(peer_mac, &frame);
         self.last_vst_x = cur_x;
         self.last_vst_pose = cur_pose;
         self.last_vst_vx = vx;
@@ -442,9 +442,9 @@ impl LocationScene {
             return;
         }
         self.last_vbeh = Some(cur);
-        if let Some(espnow) = ctx.espnow.as_mut() {
+        if let Some(peers) = ctx.peers.as_mut() {
             let frame = espnow_msg::encode_vbeh(cur);
-            espnow.send_to(peer_mac, &frame);
+            peers.send_to(peer_mac, &frame);
         }
     }
 
@@ -484,9 +484,9 @@ impl LocationScene {
         ctx.pending_greeting_target_x = None;
         self.behaviors
             .trigger(NextBehavior::Greeting, ctx, &mut self.character);
-        if let Some(espnow) = ctx.espnow.as_mut() {
+        if let Some(peers) = ctx.peers.as_mut() {
             let frame = espnow_msg::encode_empty(espnow_msg::TAG_VPROX);
-            espnow.send_to(peer_mac, &frame);
+            peers.send_to(peer_mac, &frame);
         }
         self.sniff_cooldown = SNIFF_COOLDOWN;
     }
@@ -649,8 +649,8 @@ impl LocationScene {
         if let Some(visit) = ctx.visit.as_ref() {
             let peer_mac = visit.peer_mac;
             if let Some(frame) = espnow_msg::encode_vloc(scene_id) {
-                if let Some(espnow) = ctx.espnow.as_mut() {
-                    espnow.send_to(peer_mac, &frame);
+                if let Some(peers) = ctx.peers.as_mut() {
+                    peers.send_to(peer_mac, &frame);
                 }
             }
         }
@@ -678,9 +678,9 @@ impl LocationScene {
                     &mut self.character,
                 );
                 if matches!(role, crate::context::VisitRole::Inviter) {
-                    if let Some(espnow) = ctx.espnow.as_mut() {
+                    if let Some(peers) = ctx.peers.as_mut() {
                         let frame = espnow_msg::encode_empty(espnow_msg::TAG_VGREET);
-                        espnow.send_to(peer_mac, &frame);
+                        peers.send_to(peer_mac, &frame);
                     }
                 }
                 if let Some(visit) = ctx.visit.as_mut() {

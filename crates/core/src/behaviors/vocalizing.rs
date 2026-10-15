@@ -96,7 +96,7 @@ impl VocalizingBehavior {
         }
         // Outdoor chatty: ESP-NOW radio active (typically outdoor scenes).
         if ctx
-            .espnow
+            .peers
             .as_ref()
             .is_some_and(|e| e.is_active())
             && ctx.recent_index(BehaviorId::Vocalizing).is_none()

@@ -624,7 +624,7 @@ pub struct GameContext {
     /// ESP-NOW transport. The manager struct itself is always present;
     /// its inner driver handle is bound only while
     /// [`crate::radio::acquire`] has the radio up.
-    pub espnow: Option<PeerManager>,
+    pub peers: Option<PeerManager>,
 
     /// WiFi radio controller. `Some` only while the radio is acquired;
     /// `None` at rest. Managed by [`crate::radio`].
@@ -788,7 +788,7 @@ impl GameContext {
             scan_started: false,
             last_reset_reason: heapless::String::new(),
             last_crash: None,
-            espnow: None,
+            peers: None,
             wifi: None,
             wifi_peripheral: None,
             radio_users: 0,

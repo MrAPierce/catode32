@@ -112,12 +112,12 @@ impl SocialScene {
     }
 
     fn broadcast_hello(&mut self, ctx: &mut GameContext) {
-        let Some(espnow) = ctx.espnow.as_mut() else {
+        let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
         let mut buf = [0u8; NAMED_FRAME_MAX];
         let n = espnow_msg::encode_named(TAG_HELLO, ctx.pet_name.as_str(), &mut buf);
-        espnow.send_broadcast(&buf[..n]);
+        peers.send_broadcast(&buf[..n]);
     }
 
     /// Add or refresh a peer in the nearby list. Drops on overflow
@@ -150,7 +150,7 @@ impl SocialScene {
     }
 
     fn drain_and_dispatch(&mut self, ctx: &mut GameContext) {
-        let inbox = match ctx.espnow.as_mut() {
+        let inbox = match ctx.peers.as_mut() {
             Some(m) => m.drain(),
             None => Default::default(),
         };
@@ -184,8 +184,8 @@ impl SocialScene {
         if !matches!(self.state, State::Browsing) {
             return;
         }
-        if let Some(espnow) = ctx.espnow.as_mut() {
-            espnow.add_peer(src);
+        if let Some(peers) = ctx.peers.as_mut() {
+            peers.add_peer(src);
         }
         let mut prompt: String<32> = String::new();
         let _ = prompt.push_str(name.as_str());
@@ -219,30 +219,30 @@ impl SocialScene {
     }
 
     fn send_invite(&mut self, ctx: &mut GameContext, mac: MacAddr) {
-        let Some(espnow) = ctx.espnow.as_mut() else {
+        let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
-        espnow.add_peer(mac);
+        peers.add_peer(mac);
         let mut buf = [0u8; NAMED_FRAME_MAX];
         let n = espnow_msg::encode_named(TAG_VREQ, ctx.pet_name.as_str(), &mut buf);
-        espnow.send_to(mac, &buf[..n]);
+        peers.send_to(mac, &buf[..n]);
     }
 
     fn send_vok(&mut self, ctx: &mut GameContext, mac: MacAddr) {
-        let Some(espnow) = ctx.espnow.as_mut() else {
+        let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
         let mut buf = [0u8; NAMED_FRAME_MAX];
         let n = espnow_msg::encode_named(TAG_VOK, ctx.pet_name.as_str(), &mut buf);
-        espnow.send_to(mac, &buf[..n]);
+        peers.send_to(mac, &buf[..n]);
     }
 
     fn send_vno(&mut self, ctx: &mut GameContext, mac: MacAddr) {
-        let Some(espnow) = ctx.espnow.as_mut() else {
+        let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
         let frame = espnow_msg::encode_empty(TAG_VNO);
-        espnow.send_to(mac, &frame);
+        peers.send_to(mac, &frame);
     }
 
     fn start_visit(

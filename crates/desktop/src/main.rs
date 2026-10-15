@@ -148,9 +148,9 @@ fn main() {
     let rng = Rng::new();
     let led = Led::new();
     let wifi = WIFI::new();
-    let espnow = PeerManager::new();
+    let peers = PeerManager::new();
 
-    let mut game = Game::new(renderer, buttons, rng, led, wifi, espnow);
+    let mut game = Game::new(renderer, buttons, rng, led, wifi, peers);
 
     let mut sim_display = SimulatorDisplay::<Rgb888>::new(Size::new(WIDTH, HEIGHT));
     let output = OutputSettingsBuilder::new().scale(SCALE).build();

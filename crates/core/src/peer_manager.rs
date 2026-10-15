@@ -3,10 +3,10 @@
 //! `PeerManager` is ESP-NOW on C3/C6 and the BLE manager on H2. Desktop
 //! builds get a no-op stub.
 //!
-//! Wraps [`esp_radio::esp_now::EspNow`] with a small in-process inbox
+//! Wraps [`esp_radio::esp_now::peers`] with a small in-process inbox
 //! and a fixed-size set of registered unicast peers. The manager lives
 //! on [`GameContext`] for the program's lifetime, but its inner
-//! `EspNow` handle is only bound while the radio is acquired by
+//! `peers` handle is only bound while the radio is acquired by
 //! [`crate::radio`]. Operations are silent no-ops otherwise.
 //!
 //! Desktop builds keep the same `PeerManager` shape but every method
@@ -38,23 +38,23 @@ pub const MAX_UNICAST_PEERS: usize = 4;
 mod firmware {
     use super::*;
     use esp_radio::esp_now::{
-        EspNow, EspNowError, EspNowWifiInterface, PeerInfo, ReceivedData, BROADCAST_ADDRESS,
+        peers, EspNowError, EspNowWifiInterface, PeerInfo, ReceivedData, BROADCAST_ADDRESS,
     };
 
     /// Queue a frame without waiting for the driver's send-done callback.
     ///
-    /// `EspNow::send` returns a `SendWaiter` whose `Drop` busy-waits, with no
+    /// `peers::send` returns a `SendWaiter` whose `Drop` busy-waits, with no
     /// timeout, for that callback. If the callback is ever lost the game loop
     /// spins forever. We never read the send status, so forget the waiter.
     /// The driver queues frames itself; the next send just re-arms the flag.
-    fn send_detached(inner: &mut EspNow, dst: &MacAddr, data: &[u8]) {
+    fn send_detached(inner: &mut peers, dst: &MacAddr, data: &[u8]) {
         if let Ok(waiter) = inner.send(dst, data) {
             core::mem::forget(waiter);
         }
     }
 
     pub struct PeerManager {
-        inner: Option<EspNow>,
+        inner: Option<peers>,
         own_mac: Option<MacAddr>,
         inbox: Vec<InboxItem, INBOX_CAPACITY>,
         peers: Vec<MacAddr, MAX_UNICAST_PEERS>,
@@ -72,14 +72,14 @@ mod firmware {
             }
         }
 
-        pub fn attach(&mut self, inner: EspNow, own_mac: MacAddr) {
+        pub fn attach(&mut self, inner: peers, own_mac: MacAddr) {
             self.inner = Some(inner);
             if self.own_mac.is_none() {
                 self.own_mac = Some(own_mac);
             }
         }
 
-        pub fn detach(&mut self) -> Option<EspNow> {
+        pub fn detach(&mut self) -> Option<peers> {
             self.active = false;
             self.inbox.clear();
             self.peers.clear();
@@ -102,7 +102,7 @@ mod firmware {
                 return;
             }
             let Some(inner) = self.inner.as_mut() else {
-                println!("[EspNow] activate without radio");
+                println!("[peers] activate without radio");
                 return;
             };
             let peer = PeerInfo {
@@ -114,7 +114,7 @@ mod firmware {
             };
             if let Err(e) = inner.add_peer(peer) {
                 if !matches!(e, EspNowError::Error(_)) {
-                    println!("[EspNow] add broadcast peer failed: {:?}", e);
+                    println!("[peers] add broadcast peer failed: {:?}", e);
                 }
             }
             self.active = true;
@@ -160,7 +160,7 @@ mod firmware {
                 Ok(_) => {
                     let _ = self.peers.push(mac);
                 }
-                Err(e) => println!("[EspNow] add_peer({:?}) failed: {:?}", mac, e),
+                Err(e) => println!("[peers] add_peer({:?}) failed: {:?}", mac, e),
             }
         }
 
@@ -283,9 +283,9 @@ pub fn end_visit(ctx: &mut GameContext, notify_peer: bool) {
         return;
     };
     if notify_peer {
-        if let Some(espnow) = ctx.espnow.as_mut() {
+        if let Some(peers) = ctx.peers.as_mut() {
             let frame = encode_empty(TAG_VBYE);
-            espnow.send_to(visit.peer_mac, &frame);
+            peers.send_to(visit.peer_mac, &frame);
         }
     }
     radio::release(ctx);

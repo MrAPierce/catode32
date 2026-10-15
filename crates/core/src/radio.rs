@@ -9,7 +9,7 @@
 //! the radio is fully off. The first call to [`acquire`] consumes the
 //! peripheral via `WifiController::new`, parks the new controller into
 //! `ctx.wifi`, and binds the freshly-minted ESP-NOW handle onto
-//! `ctx.espnow`. Each subsequent caller just bumps the refcount.
+//! `ctx.peers`. Each subsequent caller just bumps the refcount.
 //! [`release`] decrements; on the last release the controller and
 //! ESP-NOW handle are dropped (which de-inits the WiFi MAC) and the
 //! peripheral is recovered via `unsafe { WIFI::steal() }` for the next
@@ -37,8 +37,8 @@ mod firmware {
             if !init_radio(ctx) {
                 return false;
             }
-            if let Some(espnow) = ctx.espnow.as_mut() {
-                espnow.activate();
+            if let Some(peers) = ctx.peers.as_mut() {
+                peers.activate();
             }
         }
         ctx.radio_users = ctx.radio_users.saturating_add(1);
@@ -53,8 +53,8 @@ mod firmware {
         }
         ctx.radio_users -= 1;
         if ctx.radio_users == 0 {
-            if let Some(espnow) = ctx.espnow.as_mut() {
-                espnow.deactivate();
+            if let Some(peers) = ctx.peers.as_mut() {
+                peers.deactivate();
             }
             teardown_radio(ctx);
         }
@@ -68,8 +68,8 @@ mod firmware {
         match WifiController::new(peripheral, Default::default()) {
             Ok(controller) => {
                 let mac = Interface::station().mac_address();
-                if let Some(espnow) = ctx.espnow.as_mut() {
-                    espnow.attach(controller.esp_now(), mac);
+                if let Some(peers) = ctx.peers.as_mut() {
+                    peers.attach(controller.esp_now(), mac);
                 }
                 ctx.wifi = Some(controller);
                 true
@@ -83,8 +83,8 @@ mod firmware {
     }
 
     fn teardown_radio(ctx: &mut GameContext) {
-        if let Some(espnow) = ctx.espnow.as_mut() {
-            drop(espnow.detach());
+        if let Some(peers) = ctx.peers.as_mut() {
+            drop(peers.detach());
         }
         drop(ctx.wifi.take());
         ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
@@ -119,7 +119,7 @@ mod ble {
             };
             match BleConnector::new(bt, Default::default()) {
                 Ok(connector) => {
-                    if let Some(m) = ctx.espnow.as_mut() {
+                    if let Some(m) = ctx.peers.as_mut() {
                         m.attach(connector);
                         m.activate();
                     }
@@ -142,7 +142,7 @@ mod ble {
         }
         ctx.radio_users -= 1;
         if ctx.radio_users == 0 {
-            if let Some(m) = ctx.espnow.as_mut() {
+            if let Some(m) = ctx.peers.as_mut() {
                 m.deactivate();
                 m.detach();
             }

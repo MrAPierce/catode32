@@ -5,7 +5,7 @@ pub mod credits_scene;
 pub mod debug_behaviors_scene;
 pub mod debug_context_scene;
 pub mod debug_env_scene;
-pub mod debug_espnow_scene;
+pub mod debug_peer_scene;
 pub mod debug_led_scene;
 pub mod debug_plants_scene;
 pub mod debug_power_scene;
@@ -50,7 +50,7 @@ use credits_scene::CreditsScene;
 use debug_behaviors_scene::DebugBehaviorsScene;
 use debug_context_scene::DebugContextScene;
 use debug_env_scene::DebugEnvScene;
-use debug_espnow_scene::DebugEspnowScene;
+use debug_peer_scene::DebugPeerScene;
 use debug_led_scene::DebugLedScene;
 use debug_plants_scene::DebugPlantsScene;
 use debug_power_scene::DebugPowerScene;
@@ -111,7 +111,7 @@ crate::dispatch_enum! {
         DebugStats(DebugStatsScene)               = DebugStatsScene::new(),
         DebugTime(DebugTimeScene)                 = DebugTimeScene::new(),
         DebugWifi(DebugWifiScene)                 = DebugWifiScene::new(),
-        DebugEspnow(DebugEspnowScene)             = DebugEspnowScene::new(),
+        DebugPeer(DebugPeerScene)             = DebugPeerScene::new(),
         Social(SocialScene)                       = SocialScene::new(),
         Zoomies(ZoomiesScene)                     = ZoomiesScene::new(),
         Breakout(BreakoutScene)                   = BreakoutScene::new(),

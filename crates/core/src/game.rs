@@ -70,7 +70,7 @@ impl Game {
         rng: Rng,
         led: Led,
         wifi_peripheral: WIFI<'static>,
-        espnow: PeerManager,
+        peers: PeerManager,
     ) -> Self {
         let mut context = GameContext::new(led);
         // Seed the behavior RNG from the hardware peripheral so each boot's
@@ -78,7 +78,7 @@ impl Game {
         let seed = rng.random();
         context.rng = if seed == 0 { 1 } else { seed };
         context.hw_rng = rng;
-        context.espnow = Some(espnow);
+        context.peers = Some(peers);
         context.wifi_peripheral = Some(wifi_peripheral);
         let (reset_label, brownout) = persist::reset_reason();
         println!("[Boot] Reset reason: {}", reset_label);
@@ -176,8 +176,8 @@ impl Game {
         // Pull any inbound ESP-NOW frames from the driver into our inbox
         // before scene update so a scene-side dispatcher can drain them.
         // No-op when the manager has not been started by a social scene.
-        if let Some(espnow) = self.context.espnow.as_mut() {
-            espnow.poll();
+        if let Some(peers) = self.context.peers.as_mut() {
+            peers.poll();
         }
 
         self.update(dt);
