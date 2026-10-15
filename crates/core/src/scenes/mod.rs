@@ -11,7 +11,7 @@ pub mod debug_plants_scene;
 pub mod debug_power_scene;
 pub mod debug_stats_scene;
 pub mod debug_time_scene;
-pub mod debug_wifi_scene;
+pub mod debug_location_scene;
 pub mod forecast_scene;
 pub mod hanjie_scene;
 pub mod herding_scene;
@@ -56,7 +56,7 @@ use debug_plants_scene::DebugPlantsScene;
 use debug_power_scene::DebugPowerScene;
 use debug_stats_scene::DebugStatsScene;
 use debug_time_scene::DebugTimeScene;
-use debug_wifi_scene::DebugWifiScene;
+use debug_location_scene::DebugLocationScene;
 use forecast_scene::ForecastScene;
 use hanjie_scene::HanjieScene;
 use herding_scene::HerdingScene;
@@ -110,7 +110,7 @@ crate::dispatch_enum! {
         DebugPower(DebugPowerScene)               = DebugPowerScene::new(),
         DebugStats(DebugStatsScene)               = DebugStatsScene::new(),
         DebugTime(DebugTimeScene)                 = DebugTimeScene::new(),
-        DebugWifi(DebugWifiScene)                 = DebugWifiScene::new(),
+        DebugLocation(DebugLocationScene)                 = DebugLocationScene::new(),
         DebugPeer(DebugPeerScene)             = DebugPeerScene::new(),
         Social(SocialScene)                       = SocialScene::new(),
         Zoomies(ZoomiesScene)                     = ZoomiesScene::new(),

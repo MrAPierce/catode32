@@ -43,7 +43,7 @@ const VACATIONS: &[MenuItem<SceneId>] = &[
 ];
 
 const WIRELESS: &[MenuItem<SceneId>] = &[
-    MenuItem { label: t!("Wifi"),    icon: Some(icons::WIFI), submenu: None, action: Some(SceneId::DebugWifi),            confirm: None, confirm_on_vacation: None },
+    MenuItem { label: t!("Wifi"),    icon: Some(icons::WIFI), submenu: None, action: Some(SceneId::DebugLocation),            confirm: None, confirm_on_vacation: None },
     MenuItem { label: t!("ESP-NOW"), icon: Some(icons::WIFI), submenu: None, action: Some(SceneId::DebugPeer), confirm: None, confirm_on_vacation: None },
 ];
 

@@ -3,7 +3,7 @@
 use catode32_core::{
     context::GameContext,
     led::Led,
-    wifi_tracker::{process, ScanAp},
+    location_tracker::{process, ScanAp},
 };
 
 fn ap(id: u8) -> ScanAp {

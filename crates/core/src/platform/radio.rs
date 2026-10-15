@@ -1,7 +1,7 @@
 //! WiFi/radio handles. Firmware re-exports the real `esp_radio::wifi` types
 //! and the `esp_hal::peripherals::WIFI` marker; desktop swaps in
 //! never-constructed stubs so `GameContext` keeps the same shape. The
-//! `crate::radio` and `crate::wifi_tracker` modules drop to no-op
+//! `crate::radio` and `crate::location_tracker` modules drop to no-op
 //! implementations on desktop, so the stubs here are only there to satisfy
 //! the type system; they're never touched at runtime.
 

@@ -18,7 +18,7 @@ use crate::{
     sleep_manager::SleepManager,
     time_system::TimeSystem,
     transition::{TransitionManager, TransitionStep},
-    wifi_tracker,
+    location_tracker,
 };
 // Both the WiFi peripheral stash and the peer manager live on
 // `GameContext`. The wifi controller itself only exists between
@@ -126,7 +126,7 @@ impl Game {
         // before the marker was committed.
         let wifi_next_scan = if context.scan_started || brownout {
             println!("[Boot] Deferring first wifi scan");
-            Some(Instant::now() + wifi_tracker::SCAN_INTERVAL)
+            Some(Instant::now() + location_tracker::SCAN_INTERVAL)
         } else {
             None
         };
@@ -189,8 +189,8 @@ impl Game {
             self.context.wifi_scan_requested = false;
             // No pre-scan save here: repeated debug presses would mean
             // repeated flash writes. The hourly clock still restarts.
-            self.wifi_next_scan = Some(Instant::now() + wifi_tracker::SCAN_INTERVAL);
-            wifi_tracker::scan_now(&mut self.context);
+            self.wifi_next_scan = Some(Instant::now() + location_tracker::SCAN_INTERVAL);
+            location_tracker::scan_now(&mut self.context);
         }
 
         self.draw();
@@ -334,7 +334,7 @@ impl Game {
         }
         // Push the next scan out before scanning, success or not, so a
         // failing or resetting scan can't be retried on every swap.
-        self.wifi_next_scan = Some(now + wifi_tracker::SCAN_INTERVAL);
+        self.wifi_next_scan = Some(now + location_tracker::SCAN_INTERVAL);
 
         // The pre-scan save doubles as the hourly save (it restamps
         // `last_save_time`, holding off `save_if_needed`). Its
@@ -345,7 +345,7 @@ impl Game {
         save::save(&mut self.context);
         self.context.scan_started = false;
 
-        wifi_tracker::scan_now(&mut self.context);
+        location_tracker::scan_now(&mut self.context);
     }
 
     fn draw(&mut self) {

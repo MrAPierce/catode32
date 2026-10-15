@@ -21,7 +21,7 @@ use crate::{
     scene::SceneId,
     storage,
     time_system::{Season, Weather},
-    wifi_tracker,
+    location_tracker,
 };
 
 /// Major schema version. Bumped when the on-disk shape changes in a
@@ -29,7 +29,7 @@ use crate::{
 const SCHEMA_VERSION: u8 = 0;
 
 /// Save interval used by `save_if_needed`. Deliberately longer than
-/// `wifi_tracker::SCAN_INTERVAL`: each scan is preceded by a save, so while
+/// `location_tracker::SCAN_INTERVAL`: each scan is preceded by a save, so while
 /// scans keep running this fallback never fires and the device writes about
 /// once per scan interval rather than twice.
 const SAVE_INTERVAL: Duration = Duration::from_secs(75 * 60);
@@ -840,7 +840,7 @@ fn build_location_list<const N: usize>(src: &heapless::Vec<LocationEntry, N>) ->
     let mut out: Vec<LocationEntryData, N> = Vec::new();
     for e in src.iter() {
         let _ = out.push(LocationEntryData {
-            bssid: wifi_tracker::format_bssid(&e.bssid),
+            bssid: location_tracker::format_bssid(&e.bssid),
             ssid: e.ssid.clone(),
             count: e.count,
         });
@@ -854,7 +854,7 @@ fn apply_location_list<const N: usize>(
 ) {
     dst.clear();
     for e in src.iter() {
-        let Some(bssid) = wifi_tracker::parse_bssid(&e.bssid) else {
+        let Some(bssid) = location_tracker::parse_bssid(&e.bssid) else {
             continue;
         };
         let _ = dst.push(LocationEntry {

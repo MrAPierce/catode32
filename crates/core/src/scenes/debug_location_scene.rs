@@ -22,12 +22,12 @@ const LINE_HEIGHT: i32 = 8;
 const MAX_LINES: usize = 64;
 type Line = String<24>;
 
-pub struct DebugWifiScene {
+pub struct DebugLocationScene {
     lines: Vec<Line, MAX_LINES>,
     scroll: usize,
 }
 
-impl DebugWifiScene {
+impl DebugLocationScene {
     pub fn new() -> Self {
         Self {
             lines: Vec::new(),
@@ -114,7 +114,7 @@ fn push_entry(lines: &mut Vec<Line, MAX_LINES>, e: &LocationEntry) {
     let _ = lines.push(s);
 }
 
-impl Scene for DebugWifiScene {
+impl Scene for DebugLocationScene {
     fn enter(&mut self, ctx: &mut GameContext) {
         self.scroll = 0;
         self.rebuild(ctx);

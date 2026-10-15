@@ -63,4 +63,4 @@ pub mod ble_transport;
 pub mod transport;
 pub mod ui;
 pub mod weather_system;
-pub mod wifi_tracker;
+pub mod location_tracker;

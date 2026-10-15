@@ -25,7 +25,7 @@ use crate::{
     input::{Button, Buttons},
     render::Renderer,
     scene::{Scene, SceneId},
-    wifi_tracker::format_bssid,
+    location_tracker::format_bssid,
 };
 
 const LINES_VISIBLE: usize = 8;
