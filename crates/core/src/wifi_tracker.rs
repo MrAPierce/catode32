@@ -2,8 +2,8 @@
 //!
 //! Maintains two lists of access points on the game context:
 //!
-//! * `wifi_familiar`: up to [`WIFI_FAMILIAR_MAX`] APs seen most often.
-//! * `wifi_recent`: up to [`WIFI_RECENT_MAX`] APs seen recently but not yet
+//! * `loc_familiar`: up to [`LOCATION_FAMILIAR_MAX`] APs seen most often.
+//! * `loc_recent`: up to [`LOCATION_RECENT_MAX`] APs seen recently but not yet
 //!   promoted.
 //!
 //! Each scan increments the count for any visible AP and decays the count
@@ -31,7 +31,7 @@ use crate::platform::time::Duration;
 use heapless::Vec;
 
 use crate::context::{GameContext, WIFI_SSID_MAX};
-use crate::context::{WifiEntry, WIFI_FAMILIAR_MAX, WIFI_RECENT_MAX};
+use crate::context::{LocationEntry, LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX};
 
 #[cfg(not(feature = "desktop"))]
 use crate::radio;
@@ -84,8 +84,8 @@ pub struct ScanAp {
 }
 
 /// Drive a single wifi scan. On firmware this brings the radio up,
-/// runs the scan, releases, and updates `wifi_familiar` /
-/// `wifi_recent` / `in_familiar_location`. On desktop there is no
+/// runs the scan, releases, and updates `loc_familiar` /
+/// `loc_recent` / `in_familiar_location`. On desktop there is no
 /// radio; the call returns `None` and leaves the state untouched.
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
 pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
@@ -112,8 +112,8 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
     println!(
         "[WiFi] Scan done. familiar={} ({}/{} known)",
         ctx.in_familiar_location,
-        ctx.wifi_familiar.len(),
-        WIFI_FAMILIAR_MAX,
+        ctx.loc_familiar.len(),
+        LOCATION_FAMILIAR_MAX,
     );
     Some(aps)
 }
@@ -208,8 +208,8 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
         "[BLE] Scan done. {} beacons, familiar={} ({}/{} known)",
         aps.len(),
         ctx.in_familiar_location,
-        ctx.wifi_familiar.len(),
-        WIFI_FAMILIAR_MAX,
+        ctx.loc_familiar.len(),
+        LOCATION_FAMILIAR_MAX,
     );
     Some(aps)
 }
@@ -254,45 +254,45 @@ async fn perform_scan(
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
     // Decay unseen entries, then prune the ones that hit zero.
-    for entry in ctx.wifi_familiar.iter_mut() {
+    for entry in ctx.loc_familiar.iter_mut() {
         if !aps.iter().any(|ap| ap.bssid == entry.bssid) {
             entry.count -= DECAY_PER_SCAN;
         }
     }
-    for entry in ctx.wifi_recent.iter_mut() {
+    for entry in ctx.loc_recent.iter_mut() {
         if !aps.iter().any(|ap| ap.bssid == entry.bssid) {
             entry.count -= DECAY_PER_SCAN;
         }
     }
-    ctx.wifi_familiar.retain(|e| e.count > 0.0);
-    ctx.wifi_recent.retain(|e| e.count > 0.0);
+    ctx.loc_familiar.retain(|e| e.count > 0.0);
+    ctx.loc_recent.retain(|e| e.count > 0.0);
 
     // Increment seen entries; route genuinely new ones into the recent list,
     // evicting the lowest-count entry only when its score is below the
     // newcomer's.
     for ap in aps.iter() {
         if let Some(e) = ctx
-            .wifi_familiar
+            .loc_familiar
             .iter_mut()
             .find(|e| e.bssid == ap.bssid)
         {
             e.count += 1.0;
             continue;
         }
-        if let Some(e) = ctx.wifi_recent.iter_mut().find(|e| e.bssid == ap.bssid) {
+        if let Some(e) = ctx.loc_recent.iter_mut().find(|e| e.bssid == ap.bssid) {
             e.count += 1.0;
             continue;
         }
-        let new_entry = WifiEntry {
+        let new_entry = LocationEntry {
             bssid: ap.bssid,
             ssid: ap.ssid.clone(),
             count: 1.0,
         };
-        if ctx.wifi_recent.len() < WIFI_RECENT_MAX {
-            let _ = ctx.wifi_recent.push(new_entry);
-        } else if let Some(victim_idx) = lowest_idx(&ctx.wifi_recent) {
-            if ctx.wifi_recent[victim_idx].count < new_entry.count {
-                ctx.wifi_recent[victim_idx] = new_entry;
+        if ctx.loc_recent.len() < LOCATION_RECENT_MAX {
+            let _ = ctx.loc_recent.push(new_entry);
+        } else if let Some(victim_idx) = lowest_idx(&ctx.loc_recent) {
+            if ctx.loc_recent[victim_idx].count < new_entry.count {
+                ctx.loc_recent[victim_idx] = new_entry;
             }
         }
     }
@@ -301,26 +301,26 @@ pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
     // familiar entry out when full, demoting it into recent only if recent
     // has room (otherwise it falls out of tracking entirely).
     let mut i = 0;
-    while i < ctx.wifi_recent.len() {
-        if ctx.wifi_recent[i].count < PROMOTE_MIN {
+    while i < ctx.loc_recent.len() {
+        if ctx.loc_recent[i].count < PROMOTE_MIN {
             i += 1;
             continue;
         }
-        let candidate = ctx.wifi_recent.remove(i);
-        if ctx.wifi_familiar.len() < WIFI_FAMILIAR_MAX {
-            let _ = ctx.wifi_familiar.push(candidate);
-        } else if let Some(weakest_idx) = lowest_idx(&ctx.wifi_familiar) {
-            if candidate.count > ctx.wifi_familiar[weakest_idx].count {
+        let candidate = ctx.loc_recent.remove(i);
+        if ctx.loc_familiar.len() < LOCATION_FAMILIAR_MAX {
+            let _ = ctx.loc_familiar.push(candidate);
+        } else if let Some(weakest_idx) = lowest_idx(&ctx.loc_familiar) {
+            if candidate.count > ctx.loc_familiar[weakest_idx].count {
                 let demoted =
-                    core::mem::replace(&mut ctx.wifi_familiar[weakest_idx], candidate);
-                if ctx.wifi_recent.len() < WIFI_RECENT_MAX {
-                    let _ = ctx.wifi_recent.push(demoted);
+                    core::mem::replace(&mut ctx.loc_familiar[weakest_idx], candidate);
+                if ctx.loc_recent.len() < LOCATION_RECENT_MAX {
+                    let _ = ctx.loc_recent.push(demoted);
                 }
                 // If recent is also full, the demoted entry is dropped.
             } else {
                 // Candidate is weaker than the weakest familiar, put it
                 // back where it came from.
-                let _ = ctx.wifi_recent.insert(i, candidate);
+                let _ = ctx.loc_recent.insert(i, candidate);
                 i += 1;
             }
         }
@@ -328,14 +328,14 @@ pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
 
     // Update "at home?" flag.
     ctx.in_familiar_location = ctx
-        .wifi_familiar
+        .loc_familiar
         .iter()
         .filter(|e| aps.iter().any(|ap| ap.bssid == e.bssid))
         .count()
         >= quorum.max(1);
 }
 
-fn lowest_idx<const N: usize>(v: &Vec<WifiEntry, N>) -> Option<usize> {
+fn lowest_idx<const N: usize>(v: &Vec<LocationEntry, N>) -> Option<usize> {
     let mut best: Option<(usize, f32)> = None;
     for (i, e) in v.iter().enumerate() {
         match best {

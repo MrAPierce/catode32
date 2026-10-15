@@ -29,8 +29,8 @@ fn learn(ctx: &mut GameContext, ids: &[u8], scans: usize, quorum: usize) {
 fn entries_promote_after_repeated_sightings() {
     let mut c = ctx();
     learn(&mut c, &[1, 2], 5, 1);
-    assert_eq!(c.wifi_familiar.len(), 2);
-    assert!(c.wifi_recent.is_empty());
+    assert_eq!(c.loc_familiar.len(), 2);
+    assert!(c.loc_recent.is_empty());
 }
 
 #[test]
@@ -60,5 +60,5 @@ fn unseen_entries_decay_away() {
     for _ in 0..4 {
         process(&mut c, &[], 1);
     }
-    assert!(c.wifi_recent.is_empty());
+    assert!(c.loc_recent.is_empty());
 }

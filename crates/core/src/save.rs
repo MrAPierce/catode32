@@ -13,8 +13,8 @@ use crate::{
     assets::plants::{PlantStage, PotKind},
     context::{
         FavWeather, FoodItem, GameContext, PotSize, SeedKind, ToolKind, ToyEntry, ToyVariant,
-        WifiEntry, FOOD_ITEM_COUNT, MAX_PLANTS, PET_NAME_MAX, RECENT_HISTORY, TOY_VARIANT_COUNT,
-        WIFI_FAMILIAR_MAX, WIFI_RECENT_MAX, WIFI_SSID_MAX,
+        LocationEntry, FOOD_ITEM_COUNT, MAX_PLANTS, PET_NAME_MAX, RECENT_HISTORY, TOY_VARIANT_COUNT,
+        LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX, WIFI_SSID_MAX,
     },
     pet_seed::{PetGender, StarSign},
     plant_system::{Plant, PlantLayer},
@@ -388,7 +388,7 @@ struct MilestonesData {
 
 /// Wire-format for a single wifi AP entry: `{'b': ..., 's': ..., 'n': ...}`.
 #[derive(Default, Serialize, Deserialize)]
-struct WifiEntryData {
+struct LocationEntryData {
     #[serde(default, rename = "b")]
     bssid: heapless::String<17>,
     #[serde(default, rename = "s")]
@@ -440,8 +440,8 @@ struct SaveData {
     #[serde(default)] least_fav_toy: Option<SStr>,
     #[serde(default)] fav_location: Option<SStr>,
     #[serde(default)] least_fav_location: Option<SStr>,
-    #[serde(default)] wifi_familiar: Vec<WifiEntryData, WIFI_FAMILIAR_MAX>,
-    #[serde(default)] wifi_recent: Vec<WifiEntryData, WIFI_RECENT_MAX>,
+    #[serde(default, rename = "wifi_familiar")] loc_familiar: Vec<LocationEntryData, LOCATION_FAMILIAR_MAX>,
+    #[serde(default, rename = "wifi_recent")] loc_recent: Vec<LocationEntryData, LOCATION_RECENT_MAX>,
     /// True when this save was written immediately before a wifi scan.
     #[serde(default)] scan_started: bool,
     #[serde(default)] pet_name: Option<NameStr>,
@@ -603,8 +603,8 @@ fn build(ctx: &GameContext) -> SaveData {
         least_fav_toy: ctx.least_fav_toy.map(|t| sstr(toy_save_key(t))),
         fav_location: ctx.fav_location.map(|s| sstr(fav_location_save_key(s))),
         least_fav_location: ctx.least_fav_location.map(|s| sstr(fav_location_save_key(s))),
-        wifi_familiar: build_wifi_list(&ctx.wifi_familiar),
-        wifi_recent: build_wifi_list(&ctx.wifi_recent),
+        loc_familiar: build_location_list(&ctx.loc_familiar),
+        loc_recent: build_location_list(&ctx.loc_recent),
         scan_started: ctx.scan_started,
         pet_name: if ctx.pet_name.is_empty() {
             None
@@ -828,18 +828,18 @@ fn apply(data: &SaveData, ctx: &mut GameContext) {
 
     // WiFi tracker state. Defaults to empty lists if the save omits them
     // (e.g. saves from before wifi was wired up).
-    apply_wifi_list(&data.wifi_familiar, &mut ctx.wifi_familiar);
-    apply_wifi_list(&data.wifi_recent, &mut ctx.wifi_recent);
+    apply_location_list(&data.loc_familiar, &mut ctx.loc_familiar);
+    apply_location_list(&data.loc_recent, &mut ctx.loc_recent);
     ctx.scan_started = data.scan_started;
 
     ctx.first_impressions = false;
     ctx.recompute_health();
 }
 
-fn build_wifi_list<const N: usize>(src: &heapless::Vec<WifiEntry, N>) -> Vec<WifiEntryData, N> {
-    let mut out: Vec<WifiEntryData, N> = Vec::new();
+fn build_location_list<const N: usize>(src: &heapless::Vec<LocationEntry, N>) -> Vec<LocationEntryData, N> {
+    let mut out: Vec<LocationEntryData, N> = Vec::new();
     for e in src.iter() {
-        let _ = out.push(WifiEntryData {
+        let _ = out.push(LocationEntryData {
             bssid: wifi_tracker::format_bssid(&e.bssid),
             ssid: e.ssid.clone(),
             count: e.count,
@@ -848,16 +848,16 @@ fn build_wifi_list<const N: usize>(src: &heapless::Vec<WifiEntry, N>) -> Vec<Wif
     out
 }
 
-fn apply_wifi_list<const N: usize>(
-    src: &Vec<WifiEntryData, N>,
-    dst: &mut heapless::Vec<WifiEntry, N>,
+fn apply_location_list<const N: usize>(
+    src: &Vec<LocationEntryData, N>,
+    dst: &mut heapless::Vec<LocationEntry, N>,
 ) {
     dst.clear();
     for e in src.iter() {
         let Some(bssid) = wifi_tracker::parse_bssid(&e.bssid) else {
             continue;
         };
-        let _ = dst.push(WifiEntry {
+        let _ = dst.push(LocationEntry {
             bssid,
             ssid: e.ssid.clone(),
             count: e.count,

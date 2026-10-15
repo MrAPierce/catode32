@@ -21,8 +21,8 @@ use crate::{
 pub const PET_NAME_MAX: usize = 12;
 
 /// Caps for the wifi tracker's two AP lists.
-pub const WIFI_FAMILIAR_MAX: usize = 16;
-pub const WIFI_RECENT_MAX: usize = 8;
+pub const LOCATION_FAMILIAR_MAX: usize = 16;
+pub const LOCATION_RECENT_MAX: usize = 8;
 
 /// Max SSID length we persist with each tracked AP. Truncated to 16 at scan
 /// time so saves round-trip cleanly.
@@ -32,7 +32,7 @@ pub const WIFI_SSID_MAX: usize = 16;
 /// `aa:bb:cc:dd:ee:ff` in JSON), `s` is the SSID, `n` is the running
 /// "times seen" count subject to per-scan decay.
 #[derive(Clone, Debug)]
-pub struct WifiEntry {
+pub struct LocationEntry {
     pub bssid: [u8; 6],
     pub ssid: heapless::String<WIFI_SSID_MAX>,
     pub count: f32,
@@ -602,10 +602,10 @@ pub struct GameContext {
 
     /// Long-lived AP list. Survives reboots via the save file. Entries here
     /// are what `in_familiar_location` checks against.
-    pub wifi_familiar: Vec<WifiEntry, WIFI_FAMILIAR_MAX>,
+    pub loc_familiar: Vec<LocationEntry, LOCATION_FAMILIAR_MAX>,
     /// Short-lived AP list. Entries here are candidates that haven't been
     /// seen enough times yet to count as "familiar".
-    pub wifi_recent: Vec<WifiEntry, WIFI_RECENT_MAX>,
+    pub loc_recent: Vec<LocationEntry, LOCATION_RECENT_MAX>,
     /// Set by the debug scene's "Scan" action; Game::update consumes it
     /// next frame and drives a synchronous scan. Out-of-band from the
     /// hourly midpoint scan so the debug UI can force a fresh result.
@@ -782,8 +782,8 @@ impl GameContext {
 
             scene_plant_health: 0,
             in_familiar_location: true,
-            wifi_familiar: Vec::new(),
-            wifi_recent: Vec::new(),
+            loc_familiar: Vec::new(),
+            loc_recent: Vec::new(),
             wifi_scan_requested: false,
             scan_started: false,
             last_reset_reason: heapless::String::new(),

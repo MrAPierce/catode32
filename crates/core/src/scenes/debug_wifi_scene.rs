@@ -9,7 +9,7 @@ use embedded_graphics::prelude::Point;
 use heapless::{String, Vec};
 
 use crate::{
-    context::{GameContext, WifiEntry, WIFI_FAMILIAR_MAX, WIFI_RECENT_MAX},
+    context::{GameContext, LocationEntry, LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX},
     input::{Button, Buttons},
     render::Renderer,
     scene::{Scene, SceneId},
@@ -47,24 +47,24 @@ impl DebugWifiScene {
         push_blank(&mut self.lines);
 
         push_line(&mut self.lines, |s| {
-            let _ = write!(s, "Familiar: {}/{}", ctx.wifi_familiar.len(), WIFI_FAMILIAR_MAX);
+            let _ = write!(s, "Familiar: {}/{}", ctx.loc_familiar.len(), LOCATION_FAMILIAR_MAX);
         });
-        if ctx.wifi_familiar.is_empty() {
+        if ctx.loc_familiar.is_empty() {
             push_static(&mut self.lines, "(none yet)");
         } else {
-            for e in ctx.wifi_familiar.iter() {
+            for e in ctx.loc_familiar.iter() {
                 push_entry(&mut self.lines, e);
             }
         }
         push_blank(&mut self.lines);
 
         push_line(&mut self.lines, |s| {
-            let _ = write!(s, "Recent: {}/{}", ctx.wifi_recent.len(), WIFI_RECENT_MAX);
+            let _ = write!(s, "Recent: {}/{}", ctx.loc_recent.len(), LOCATION_RECENT_MAX);
         });
-        if ctx.wifi_recent.is_empty() {
+        if ctx.loc_recent.is_empty() {
             push_static(&mut self.lines, "(none yet)");
         } else {
-            for e in ctx.wifi_recent.iter() {
+            for e in ctx.loc_recent.iter() {
                 push_entry(&mut self.lines, e);
             }
         }
@@ -90,7 +90,7 @@ fn push_line<F: FnOnce(&mut Line)>(lines: &mut Vec<Line, MAX_LINES>, f: F) {
     let _ = lines.push(s);
 }
 
-fn push_entry(lines: &mut Vec<Line, MAX_LINES>, e: &WifiEntry) {
+fn push_entry(lines: &mut Vec<Line, MAX_LINES>, e: &LocationEntry) {
     let mut s = Line::new();
     let label: &str = if e.ssid.is_empty() {
         // No SSID, so fall back to the first 10 chars of the BSSID for some
