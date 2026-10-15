@@ -92,7 +92,7 @@ impl Scene for TreehouseScene {
         ctx.scene_x_min = 20;
         ctx.scene_x_max = 236;
         ctx.cat_bed_x = Some(CAT_BED_X);
-        // Acquire the radio for passive ESP-NOW listening. Phase 4
+        // Acquire the radio for passive peer listening. Phase 4
         // will gate this on "not currently visiting" once visits exist.
         crate::peer_manager::start_session(ctx);
     }

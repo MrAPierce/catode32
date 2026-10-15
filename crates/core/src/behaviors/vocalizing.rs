@@ -94,7 +94,7 @@ impl VocalizingBehavior {
                 return (rand::rand_range_f32(rng, 12.0, 22.0) / urgency).max(0.0) as u32;
             }
         }
-        // Outdoor chatty: ESP-NOW radio active (typically outdoor scenes).
+        // Outdoor chatty: peer radio active (typically outdoor scenes).
         if ctx
             .peers
             .as_ref()
@@ -157,7 +157,7 @@ impl Behavior for VocalizingBehavior {
                 self.phase_timer = 0.0;
                 self.pose_id = PoseId::YellingForwardLiftAndYell;
                 // Signal LocationScene to broadcast this vocalization
-                // over ESP-NOW if the radio is acquired for this scene.
+                // over the peer transport if the radio is acquired for this scene.
                 // The icon hint reuses the same `pending_popup_icon`
                 // value that drives the on-screen bubble.
                 ctx.pending_vocalize_broadcast = ctx.pending_popup_icon;

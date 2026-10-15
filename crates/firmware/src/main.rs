@@ -41,7 +41,7 @@ fn main() -> ! {
 
     // No wifi init at boot. The radio is brought up on demand by
     // `radio::acquire` and dropped again on the last release. The
-    // peripheral and an empty ESP-NOW manager are stashed on the game
+    // peripheral and an empty peer manager are stashed on the game
     // context so the first acquire can do the actual `wifi::new`.
     Game::new(
         renderer,

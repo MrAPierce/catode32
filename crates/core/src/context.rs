@@ -112,7 +112,7 @@ pub enum VisitRole {
 /// across scene transitions so the visit runtime keeps receiving.
 #[derive(Clone)]
 pub struct VisitState {
-    pub peer_mac: crate::transport::PeerId,
+    pub peer_id: crate::transport::PeerId,
     pub peer_name: heapless::String<PET_NAME_MAX>,
     pub role: VisitRole,
     /// Wall-clock seconds the visit has been running. Bumped each
@@ -583,7 +583,7 @@ pub struct GameContext {
     /// Set by the Vocalizing behavior when it transitions from
     /// WindingUp into the actual Vocalizing phase. `LocationScene`
     /// reads-and-clears this each frame and, if the cat is currently
-    /// in a scene that has the ESP-NOW radio acquired
+    /// in a scene that has the peer radio acquired
     /// (outside/treehouse), broadcasts a `voc ` frame so nearby cats
     /// can hear the vocalization.
     pub pending_vocalize_broadcast: Option<&'static str>,
@@ -621,7 +621,7 @@ pub struct GameContext {
     /// at boot for the Power debug screen; never saved.
     pub last_crash: Option<crate::platform::persist::CrashRecord>,
 
-    /// ESP-NOW transport. The manager struct itself is always present;
+    /// peer transport (ESP-NOW or BLE). The manager struct itself is always present;
     /// its inner driver handle is bound only while
     /// [`crate::radio::acquire`] has the radio up.
     pub peers: Option<PeerManager>,

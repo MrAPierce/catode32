@@ -20,7 +20,7 @@
 //!            | B on prompt  -> send vno -> back to Browsing
 //! ```
 //!
-//! Wire format: clean-break binary tags defined in [`crate::espnow_msg`]
+//! Wire format: clean-break binary tags defined in [`crate::peer_msg`]
 //! (`hi  `, `vreq`, `vok `, `vno `). Discovery broadcasts a hello every
 //! 2 s; nearby peers age out after 6 s without a fresh hello; an
 //! outgoing invite times out after 10 s.
@@ -40,7 +40,7 @@ use crate::transport::{PeerId, Transport};
 use crate::{
     context::{GameContext, VisitRole, VisitState, PET_NAME_MAX},
     peer_manager,
-    espnow_msg::{
+    peer_msg::{
         self, PetName, NAMED_FRAME_MAX, TAG_HELLO, TAG_VNO, TAG_VOK, TAG_VREQ,
     },
     input::{Button, Buttons},
@@ -71,12 +71,12 @@ struct NearbyEntry {
 enum State {
     Browsing,
     Inviting {
-        peer_mac: MacAddr,
+        peer_id: MacAddr,
         peer_name: PetName,
         elapsed: f32,
     },
     Invited {
-        peer_mac: MacAddr,
+        peer_id: MacAddr,
         peer_name: PetName,
         /// Seconds the confirm has been on screen. Mirrors the
         /// inviter's `INVITE_TIMEOUT` so the prompt vanishes on its
@@ -116,7 +116,7 @@ impl SocialScene {
             return;
         };
         let mut buf = [0u8; NAMED_FRAME_MAX];
-        let n = espnow_msg::encode_named(TAG_HELLO, ctx.pet_name.as_str(), &mut buf);
+        let n = peer_msg::encode_named(TAG_HELLO, ctx.pet_name.as_str(), &mut buf);
         peers.send_broadcast(&buf[..n]);
     }
 
@@ -157,19 +157,19 @@ impl SocialScene {
         for item in inbox.iter() {
             let src = item.src;
             let data = &item.data[..];
-            if let Some(name) = espnow_msg::decode_named(TAG_HELLO, data) {
+            if let Some(name) = peer_msg::decode_named(TAG_HELLO, data) {
                 self.note_hello(src, name);
                 continue;
             }
-            if let Some(name) = espnow_msg::decode_named(TAG_VREQ, data) {
+            if let Some(name) = peer_msg::decode_named(TAG_VREQ, data) {
                 self.handle_vreq(ctx, src, name);
                 continue;
             }
-            if let Some(name) = espnow_msg::decode_named(TAG_VOK, data) {
+            if let Some(name) = peer_msg::decode_named(TAG_VOK, data) {
                 self.handle_vok(ctx, src, name);
                 continue;
             }
-            if espnow_msg::matches_tag(TAG_VNO, data) {
+            if peer_msg::matches_tag(TAG_VNO, data) {
                 self.handle_vno(src);
                 continue;
             }
@@ -192,27 +192,27 @@ impl SocialScene {
         let _ = prompt.push_str(t!(" wants to play!"));
         self.confirm.open(prompt.as_str());
         self.state = State::Invited {
-            peer_mac: src,
+            peer_id: src,
             peer_name: name,
             elapsed: 0.0,
         };
     }
 
     fn handle_vok(&mut self, ctx: &mut GameContext, src: MacAddr, name: PetName) {
-        let State::Inviting { peer_mac, .. } = &self.state else {
+        let State::Inviting { peer_id, .. } = &self.state else {
             return;
         };
-        if *peer_mac != src {
+        if *peer_id != src {
             return;
         }
         self.start_visit(ctx, src, name, VisitRole::Inviter);
     }
 
     fn handle_vno(&mut self, src: MacAddr) {
-        let State::Inviting { peer_mac, .. } = &self.state else {
+        let State::Inviting { peer_id, .. } = &self.state else {
             return;
         };
-        if *peer_mac != src {
+        if *peer_id != src {
             return;
         }
         self.state = State::Browsing;
@@ -224,7 +224,7 @@ impl SocialScene {
         };
         peers.add_peer(mac);
         let mut buf = [0u8; NAMED_FRAME_MAX];
-        let n = espnow_msg::encode_named(TAG_VREQ, ctx.pet_name.as_str(), &mut buf);
+        let n = peer_msg::encode_named(TAG_VREQ, ctx.pet_name.as_str(), &mut buf);
         peers.send_to(mac, &buf[..n]);
     }
 
@@ -233,7 +233,7 @@ impl SocialScene {
             return;
         };
         let mut buf = [0u8; NAMED_FRAME_MAX];
-        let n = espnow_msg::encode_named(TAG_VOK, ctx.pet_name.as_str(), &mut buf);
+        let n = peer_msg::encode_named(TAG_VOK, ctx.pet_name.as_str(), &mut buf);
         peers.send_to(mac, &buf[..n]);
     }
 
@@ -241,19 +241,19 @@ impl SocialScene {
         let Some(peers) = ctx.peers.as_mut() else {
             return;
         };
-        let frame = espnow_msg::encode_empty(TAG_VNO);
+        let frame = peer_msg::encode_empty(TAG_VNO);
         peers.send_to(mac, &frame);
     }
 
     fn start_visit(
         &mut self,
         ctx: &mut GameContext,
-        peer_mac: MacAddr,
+        peer_id: MacAddr,
         peer_name: PetName,
         role: VisitRole,
     ) {
         ctx.visit = Some(VisitState {
-            peer_mac,
+            peer_id,
             peer_name,
             role,
             play_time: 0.0,
@@ -354,7 +354,7 @@ impl Scene for SocialScene {
                         let entry = self.nearby[self.selected].clone();
                         self.send_invite(ctx, entry.mac);
                         self.state = State::Inviting {
-                            peer_mac: entry.mac,
+                            peer_id: entry.mac,
                             peer_name: entry.name,
                             elapsed: 0.0,
                         };
@@ -381,10 +381,10 @@ impl Scene for SocialScene {
                 }
             }
             State::Invited {
-                peer_mac, elapsed, ..
+                peer_id, elapsed, ..
             } => {
                 *elapsed += dt;
-                let mac = *peer_mac;
+                let mac = *peer_id;
                 let timed_out = *elapsed >= INVITE_TIMEOUT;
                 let input = self.confirm.handle_input(buttons);
                 match (input, timed_out) {

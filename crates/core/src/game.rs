@@ -20,7 +20,7 @@ use crate::{
     transition::{TransitionManager, TransitionStep},
     wifi_tracker,
 };
-// Both the WiFi peripheral stash and the ESP-NOW manager live on
+// Both the WiFi peripheral stash and the peer manager live on
 // `GameContext`. The wifi controller itself only exists between
 // `radio::acquire` / `radio::release` calls.
 
@@ -52,7 +52,7 @@ pub struct Game {
     last_dt_ms: u64,
     /// Real-time instant at which the next wifi scan becomes due.
     /// `None` means "scan ASAP" (used on boot). The controller itself
-    /// lives on `GameContext` so the ESP-NOW manager and scenes can
+    /// lives on `GameContext` so the peer manager and scenes can
     /// share it.
     wifi_next_scan: Option<Instant>,
     /// Promoted from a local in `run()` so `tick()` can compute dt across
@@ -173,7 +173,7 @@ impl Game {
             self.sleep_manager.notify_activity();
         }
 
-        // Pull any inbound ESP-NOW frames from the driver into our inbox
+        // Pull any inbound peer frames from the driver into our inbox
         // before scene update so a scene-side dispatcher can drain them.
         // No-op when the manager has not been started by a social scene.
         if let Some(peers) = self.context.peers.as_mut() {

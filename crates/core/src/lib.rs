@@ -35,7 +35,7 @@ pub mod context;
 pub mod entities;
 pub mod environment;
 pub mod peer_manager;
-pub mod espnow_msg;
+pub mod peer_msg;
 pub mod game;
 pub mod gardening_ui;
 pub mod input;
