@@ -4,7 +4,7 @@
 mod panic;
 
 use catode32_core::{
-    board, espnow_manager::EspNowManager, game::Game, platform::watchdog, render::Renderer,
+    board, peer_manager::PeerManager, game::Game, platform::watchdog, render::Renderer,
     storage,
 };
 use esp_hal::{clock::CpuClock, main, timer::timg::TimerGroup};
@@ -49,7 +49,7 @@ fn main() -> ! {
         board.rng,
         board.led,
         board.wifi,
-        EspNowManager::new(),
+        PeerManager::new(),
     )
     .run();
 }

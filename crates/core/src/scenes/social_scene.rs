@@ -39,7 +39,7 @@ use crate::transport::{PeerId, Transport};
 
 use crate::{
     context::{GameContext, VisitRole, VisitState, PET_NAME_MAX},
-    espnow_manager,
+    peer_manager,
     espnow_msg::{
         self, PetName, NAMED_FRAME_MAX, TAG_HELLO, TAG_VNO, TAG_VOK, TAG_VREQ,
     },
@@ -263,7 +263,7 @@ impl SocialScene {
         // it survives this scene's `exit` (which always releases the
         // refcount it took in `enter`). Phase 5b's `end_visit` drops
         // this one.
-        espnow_manager::start_session(ctx);
+        peer_manager::start_session(ctx);
     }
 
     fn draw_browsing(&self, renderer: &mut Renderer) {
@@ -296,7 +296,7 @@ impl Scene for SocialScene {
         self.nearby.clear();
         self.selected = 0;
         self.hello_timer = 0.0;
-        espnow_manager::start_session(ctx);
+        peer_manager::start_session(ctx);
         // If we arrived while a visit is already in progress (the
         // user re-opened the menu mid-playdate), jump straight to
         // Visiting and offer to leave.
@@ -313,7 +313,7 @@ impl Scene for SocialScene {
         // A handshake-success (or pre-existing visit kept open) just
         // means the *visit* still holds its own separate refcount, so
         // the radio stays up regardless.
-        espnow_manager::stop_session(ctx);
+        peer_manager::stop_session(ctx);
     }
 
     fn update(
@@ -371,7 +371,7 @@ impl Scene for SocialScene {
             State::Visiting => {
                 match self.confirm.handle_input(buttons) {
                     ConfirmResult::Confirmed => {
-                        espnow_manager::end_visit(ctx, true);
+                        peer_manager::end_visit(ctx, true);
                         return Some(ctx.last_main_scene);
                     }
                     ConfirmResult::Cancelled => {

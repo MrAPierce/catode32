@@ -9,7 +9,7 @@ use crate::platform::{
 
 use crate::{
     context::{GameContext, PowerAction},
-    espnow_manager::EspNowManager,
+    peer_manager::PeerManager,
     input::Buttons,
     led::Led,
     render::Renderer,
@@ -70,7 +70,7 @@ impl Game {
         rng: Rng,
         led: Led,
         wifi_peripheral: WIFI<'static>,
-        espnow: EspNowManager,
+        espnow: PeerManager,
     ) -> Self {
         let mut context = GameContext::new(led);
         // Seed the behavior RNG from the hardware peripheral so each boot's

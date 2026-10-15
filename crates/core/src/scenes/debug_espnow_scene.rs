@@ -3,7 +3,7 @@
 //! it. Shows the local MAC address, registered-peer count, send and
 //! receive counters, and a scrollable log of the most recent packets.
 //!
-//! Activates the [`crate::espnow_manager::EspNowManager`] on `enter` and
+//! Activates the [`crate::peer_manager::PeerManager`] on `enter` and
 //! parks it on `exit`, so opening the scene is the only thing on the
 //! device that powers up the radio for ESP-NOW traffic until the social
 //! scene is implemented.
@@ -21,7 +21,7 @@ use heapless::{String, Vec};
 
 use crate::{
     context::GameContext,
-    espnow_manager,
+    peer_manager,
     input::{Button, Buttons},
     render::Renderer,
     scene::{Scene, SceneId},
@@ -142,7 +142,7 @@ impl Scene for DebugEspnowScene {
         self.scroll_from_bottom = 0;
         self.send_count = 0;
         self.recv_count = 0;
-        if espnow_manager::start_session(ctx) {
+        if peer_manager::start_session(ctx) {
             self.push_log(|s| {
                 let _ = s.push_str("radio on");
             });
@@ -154,7 +154,7 @@ impl Scene for DebugEspnowScene {
     }
 
     fn exit(&mut self, ctx: &mut GameContext) {
-        espnow_manager::stop_session(ctx);
+        peer_manager::stop_session(ctx);
     }
 
     fn update(

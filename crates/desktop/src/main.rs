@@ -19,7 +19,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use catode32_core::{
-    espnow_manager::EspNowManager,
+    peer_manager::PeerManager,
     game::Game,
     input::{set_desktop_button, ButtonPin, Buttons},
     led::Led,
@@ -148,7 +148,7 @@ fn main() {
     let rng = Rng::new();
     let led = Led::new();
     let wifi = WIFI::new();
-    let espnow = EspNowManager::new();
+    let espnow = PeerManager::new();
 
     let mut game = Game::new(renderer, buttons, rng, led, wifi, espnow);
 

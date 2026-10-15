@@ -1,4 +1,7 @@
-//! ESP-NOW transport layer.
+//! Peer manager: the game-facing transport handle.
+//!
+//! `PeerManager` is ESP-NOW on C3/C6 and the BLE manager on H2. Desktop
+//! builds get a no-op stub.
 //!
 //! Wraps [`esp_radio::esp_now::EspNow`] with a small in-process inbox
 //! and a fixed-size set of registered unicast peers. The manager lives
@@ -6,7 +9,7 @@
 //! `EspNow` handle is only bound while the radio is acquired by
 //! [`crate::radio`]. Operations are silent no-ops otherwise.
 //!
-//! Desktop builds keep the same `EspNowManager` shape but every method
+//! Desktop builds keep the same `PeerManager` shape but every method
 //! is a no-op. There are no peers and the inbox is always empty, so
 //! scenes that use the radio degrade gracefully into "offline" mode.
 
@@ -50,7 +53,7 @@ mod firmware {
         }
     }
 
-    pub struct EspNowManager {
+    pub struct PeerManager {
         inner: Option<EspNow>,
         own_mac: Option<MacAddr>,
         inbox: Vec<InboxItem, INBOX_CAPACITY>,
@@ -58,7 +61,7 @@ mod firmware {
         active: bool,
     }
 
-    impl EspNowManager {
+    impl PeerManager {
         pub fn new() -> Self {
             Self {
                 inner: None,
@@ -85,7 +88,7 @@ mod firmware {
 
     }
 
-    impl Transport for EspNowManager {
+    impl Transport for PeerManager {
         fn own_id(&self) -> Option<PeerId> {
             self.own_mac.map(PeerId::from_mac)
         }
@@ -223,7 +226,7 @@ mod firmware {
 }
 
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
-pub use firmware::EspNowManager;
+pub use firmware::PeerManager;
 
 #[cfg(all(feature = "desktop", not(feature = "h2")))]
 mod desktop {
@@ -231,15 +234,15 @@ mod desktop {
 
     /// No-op manager. There is no radio on desktop, so every call
     /// silently does nothing and `drain` always returns an empty Vec.
-    pub struct EspNowManager;
+    pub struct PeerManager;
 
-    impl EspNowManager {
+    impl PeerManager {
         pub fn new() -> Self {
             Self
         }
     }
 
-    impl Transport for EspNowManager {
+    impl Transport for PeerManager {
         fn own_id(&self) -> Option<PeerId> {
             None
         }
@@ -259,11 +262,11 @@ mod desktop {
 }
 
 #[cfg(all(feature = "desktop", not(feature = "h2")))]
-pub use desktop::EspNowManager;
+pub use desktop::PeerManager;
 
 /// The H2 has no WiFi; its "ESP-NOW" transport is BLE.
 #[cfg(feature = "h2")]
-pub use crate::ble_transport::BleManager as EspNowManager;
+pub use crate::ble_transport::BleManager as PeerManager;
 
 /// Acquire the radio for ESP-NOW traffic. Scenes call this on `enter`.
 /// On desktop this always returns false (no radio).

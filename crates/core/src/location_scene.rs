@@ -212,7 +212,7 @@ impl LocationScene {
             if self.visit_silence_timer >= VISIT_SILENCE_TIMEOUT {
                 // Peer hasn't been heard in a while. End the visit
                 // locally without notifying; they're probably gone.
-                crate::espnow_manager::end_visit(ctx, false);
+                crate::peer_manager::end_visit(ctx, false);
             }
         }
 
@@ -304,7 +304,7 @@ impl LocationScene {
             if espnow_msg::matches_tag(espnow_msg::TAG_VBYE, &item.data) {
                 if Some(item.src) == peer_mac {
                     // Peer is leaving. End locally without re-notifying.
-                    crate::espnow_manager::end_visit(ctx, false);
+                    crate::peer_manager::end_visit(ctx, false);
                 }
                 continue;
             }

@@ -10,7 +10,7 @@ use crate::platform::{
 use crate::{
     assets::plants::{PlantStage, PotKind},
     behavior::BehaviorId,
-    espnow_manager::EspNowManager,
+    peer_manager::PeerManager,
     led::Led,
     pet_seed::{PetGender, StarSign},
     plant_system::{Plant, PlantLayer},
@@ -624,7 +624,7 @@ pub struct GameContext {
     /// ESP-NOW transport. The manager struct itself is always present;
     /// its inner driver handle is bound only while
     /// [`crate::radio::acquire`] has the radio up.
-    pub espnow: Option<EspNowManager>,
+    pub espnow: Option<PeerManager>,
 
     /// WiFi radio controller. `Some` only while the radio is acquired;
     /// `None` at rest. Managed by [`crate::radio`].
