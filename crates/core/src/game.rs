@@ -54,7 +54,7 @@ pub struct Game {
     /// `None` means "scan ASAP" (used on boot). The controller itself
     /// lives on `GameContext` so the peer manager and scenes can
     /// share it.
-    wifi_next_scan: Option<Instant>,
+    location_next_scan: Option<Instant>,
     /// Promoted from a local in `run()` so `tick()` can compute dt across
     /// calls. Initialised lazily on the first tick.
     last_frame: Option<Instant>,
@@ -124,7 +124,7 @@ impl Game {
         // means "the last scan was at this save's moment": wait a full
         // interval. A brownout also defers, in case it hit during that save
         // before the marker was committed.
-        let wifi_next_scan = if context.scan_started || brownout {
+        let location_next_scan = if context.scan_started || brownout {
             println!("[Boot] Deferring first wifi scan");
             Some(Instant::now() + location_tracker::SCAN_INTERVAL)
         } else {
@@ -146,7 +146,7 @@ impl Game {
             deep_sleep_pending: false,
             just_woke: false,
             last_dt_ms: 0,
-            wifi_next_scan,
+            location_next_scan,
             last_frame: None,
             resumed_intent: resumed,
         }
@@ -185,11 +185,11 @@ impl Game {
         // Debug-scene-requested scan. Runs immediately (no transition
         // cover) since the player is staring at a debug screen and
         // explicitly asked for fresh data.
-        if self.context.wifi_scan_requested {
-            self.context.wifi_scan_requested = false;
+        if self.context.location_scan_requested {
+            self.context.location_scan_requested = false;
             // No pre-scan save here: repeated debug presses would mean
             // repeated flash writes. The hourly clock still restarts.
-            self.wifi_next_scan = Some(Instant::now() + location_tracker::SCAN_INTERVAL);
+            self.location_next_scan = Some(Instant::now() + location_tracker::SCAN_INTERVAL);
             location_tracker::scan_now(&mut self.context);
         }
 
@@ -319,13 +319,13 @@ impl Game {
 
     /// Run a wifi scan if one is due. Called only from the transition
     /// midpoint so the ~1-3 s blocking scan is hidden behind a black screen.
-    /// `wifi_next_scan = None` means "scan immediately" (a boot whose save
+    /// `location_next_scan = None` means "scan immediately" (a boot whose save
     /// was not taken right before a scan).
     fn maybe_scan_wifi(&mut self) {
         // No `ctx.wifi` check anymore: the controller doesn't exist at
         // rest. `scan_now` does its own acquire/release.
         let now = Instant::now();
-        let due = match self.wifi_next_scan {
+        let due = match self.location_next_scan {
             None => true,
             Some(t) => now >= t,
         };
@@ -334,7 +334,7 @@ impl Game {
         }
         // Push the next scan out before scanning, success or not, so a
         // failing or resetting scan can't be retried on every swap.
-        self.wifi_next_scan = Some(now + location_tracker::SCAN_INTERVAL);
+        self.location_next_scan = Some(now + location_tracker::SCAN_INTERVAL);
 
         // The pre-scan save doubles as the hourly save (it restamps
         // `last_save_time`, holding off `save_if_needed`). Its

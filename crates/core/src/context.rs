@@ -609,7 +609,7 @@ pub struct GameContext {
     /// Set by the debug scene's "Scan" action; Game::update consumes it
     /// next frame and drives a synchronous scan. Out-of-band from the
     /// hourly midpoint scan so the debug UI can force a fresh result.
-    pub wifi_scan_requested: bool,
+    pub location_scan_requested: bool,
     /// True only while writing the pre-scan save, so that save records
     /// "a scan started at this save's moment". Loaded back on boot to defer
     /// the first scan, since no clock survives a reset.
@@ -784,7 +784,7 @@ impl GameContext {
             in_familiar_location: true,
             loc_familiar: Vec::new(),
             loc_recent: Vec::new(),
-            wifi_scan_requested: false,
+            location_scan_requested: false,
             scan_started: false,
             last_reset_reason: heapless::String::new(),
             last_crash: None,

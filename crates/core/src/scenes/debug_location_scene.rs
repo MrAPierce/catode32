@@ -1,7 +1,7 @@
 //! Debug screen for the wifi tracker. Shows the familiar/recent AP lists,
 //! the last live-scan results, and the `in_familiar_location` flag. A press
 //! of A triggers a fresh scan (handled by `Game::update` via
-//! `ctx.wifi_scan_requested`).
+//! `ctx.location_scan_requested`).
 
 use core::fmt::Write as _;
 
@@ -130,7 +130,7 @@ impl Scene for DebugLocationScene {
             return Some(ctx.last_main_scene);
         }
         if buttons.was_just_pressed(Button::A) {
-            ctx.wifi_scan_requested = true;
+            ctx.location_scan_requested = true;
             // Refresh the displayed lines next frame so the new scan
             // result lands as soon as the game loop has run it.
             self.scroll = 0;
