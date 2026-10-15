@@ -4,7 +4,7 @@
 
 use heapless::Vec;
 
-use crate::location_tracker::ScanAp;
+use crate::location_tracker::ScanBeacon;
 
 /// Weakest signal still treated as "here" (dBm).
 pub const BLE_RSSI_FLOOR: i8 = -85;
@@ -60,11 +60,11 @@ fn local_name(data: &[u8]) -> Option<&[u8]> {
 
 /// Filter one scan's worth of reports. `reports` yields
 /// `(addr_kind, addr, rssi, adv_data)`. Duplicates keep the strongest RSSI.
-pub fn filter_reports<'a, I>(reports: I) -> Vec<ScanAp, 32>
+pub fn filter_reports<'a, I>(reports: I) -> Vec<ScanBeacon, 32>
 where
     I: IntoIterator<Item = (u8, [u8; 6], i8, &'a [u8])>,
 {
-    let mut out: Vec<ScanAp, 32> = Vec::new();
+    let mut out: Vec<ScanBeacon, 32> = Vec::new();
     for (kind, addr, rssi, data) in reports {
         let stable = match kind {
             ADDR_PUBLIC => true,
@@ -74,16 +74,16 @@ where
         if !stable || rssi < BLE_RSSI_FLOOR || is_catode_advert(data) {
             continue;
         }
-        if let Some(existing) = out.iter_mut().find(|a| a.bssid == addr) {
+        if let Some(existing) = out.iter_mut().find(|a| a.addr == addr) {
             if rssi > existing.rssi {
                 existing.rssi = rssi;
             }
             continue;
         }
-        let mut ssid = heapless::String::new();
-        if let Some(name) = local_name(data).and_then(|n| core::str::from_utf8(n).ok()) {
-            for c in name.chars() {
-                if ssid.push(c).is_err() {
+        let mut name = heapless::String::new();
+        if let Some(raw) = local_name(data).and_then(|n| core::str::from_utf8(n).ok()) {
+            for c in raw.chars() {
+                if name.push(c).is_err() {
                     break;
                 }
             }
@@ -101,7 +101,7 @@ where
             }
             out.swap_remove(idx);
         }
-        let _ = out.push(ScanAp { bssid: addr, ssid, rssi });
+        let _ = out.push(ScanBeacon { addr, name, rssi });
     }
     out.sort_unstable_by(|a, b| b.rssi.cmp(&a.rssi));
     out.truncate(BLE_MAX_REPORTS);

@@ -14,7 +14,7 @@ use crate::{
     context::{
         FavWeather, FoodItem, GameContext, PotSize, SeedKind, ToolKind, ToyEntry, ToyVariant,
         LocationEntry, FOOD_ITEM_COUNT, MAX_PLANTS, PET_NAME_MAX, RECENT_HISTORY, TOY_VARIANT_COUNT,
-        LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX, WIFI_SSID_MAX,
+        LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX, LOCATION_NAME_MAX,
     },
     pet_seed::{PetGender, StarSign},
     plant_system::{Plant, PlantLayer},
@@ -386,13 +386,13 @@ struct MilestonesData {
     #[serde(default)] store: bool,
 }
 
-/// Wire-format for a single wifi AP entry: `{'b': ..., 's': ..., 'n': ...}`.
+/// Wire-format for a single location entry (WiFi AP or BLE beacon): `{'b': ..., 's': ..., 'n': ...}`.
 #[derive(Default, Serialize, Deserialize)]
 struct LocationEntryData {
     #[serde(default, rename = "b")]
-    bssid: heapless::String<17>,
+    addr: heapless::String<17>,
     #[serde(default, rename = "s")]
-    ssid: heapless::String<WIFI_SSID_MAX>,
+    name: heapless::String<LOCATION_NAME_MAX>,
     #[serde(default, rename = "n")]
     count: f32,
 }
@@ -840,8 +840,8 @@ fn build_location_list<const N: usize>(src: &heapless::Vec<LocationEntry, N>) ->
     let mut out: Vec<LocationEntryData, N> = Vec::new();
     for e in src.iter() {
         let _ = out.push(LocationEntryData {
-            bssid: location_tracker::format_bssid(&e.bssid),
-            ssid: e.ssid.clone(),
+            addr: location_tracker::format_addr(&e.addr),
+            name: e.name.clone(),
             count: e.count,
         });
     }
@@ -854,12 +854,12 @@ fn apply_location_list<const N: usize>(
 ) {
     dst.clear();
     for e in src.iter() {
-        let Some(bssid) = location_tracker::parse_bssid(&e.bssid) else {
+        let Some(addr) = location_tracker::parse_addr(&e.addr) else {
             continue;
         };
         let _ = dst.push(LocationEntry {
-            bssid,
-            ssid: e.ssid.clone(),
+            addr,
+            name: e.name.clone(),
             count: e.count,
         });
     }

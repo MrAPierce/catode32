@@ -3,13 +3,13 @@
 use catode32_core::{
     context::GameContext,
     led::Led,
-    location_tracker::{process, ScanAp},
+    location_tracker::{process, ScanBeacon},
 };
 
-fn ap(id: u8) -> ScanAp {
-    ScanAp {
-        bssid: [0, 0, 0, 0, 0, id],
-        ssid: heapless::String::new(),
+fn ap(id: u8) -> ScanBeacon {
+    ScanBeacon {
+        addr: [0, 0, 0, 0, 0, id],
+        name: heapless::String::new(),
         rssi: -60,
     }
 }
@@ -19,7 +19,7 @@ fn ctx() -> GameContext {
 }
 
 fn learn(ctx: &mut GameContext, ids: &[u8], scans: usize, quorum: usize) {
-    let aps: Vec<ScanAp> = ids.iter().map(|i| ap(*i)).collect();
+    let aps: Vec<ScanBeacon> = ids.iter().map(|i| ap(*i)).collect();
     for _ in 0..scans {
         process(ctx, &aps, quorum);
     }

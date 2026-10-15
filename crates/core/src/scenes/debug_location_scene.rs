@@ -92,20 +92,20 @@ fn push_line<F: FnOnce(&mut Line)>(lines: &mut Vec<Line, MAX_LINES>, f: F) {
 
 fn push_entry(lines: &mut Vec<Line, MAX_LINES>, e: &LocationEntry) {
     let mut s = Line::new();
-    let label: &str = if e.ssid.is_empty() {
-        // No SSID, so fall back to the first 10 chars of the BSSID for some
+    let label: &str = if e.name.is_empty() {
+        // No name, so fall back to the first 10 chars of the address for some
         // identifying info.
         let _ = write!(
             s,
             "{:02x}:{:02x}:{:02x} {:.1}",
-            e.bssid[3], e.bssid[4], e.bssid[5], e.count
+            e.addr[3], e.addr[4], e.addr[5], e.count
         );
         let _ = lines.push(s);
         return;
     } else {
-        e.ssid.as_str()
+        e.name.as_str()
     };
-    // Truncate SSID to 10 chars for layout.
+    // Truncate name to 10 chars for layout.
     let mut shown: String<10> = String::new();
     for c in label.chars().take(10) {
         let _ = shown.push(c);

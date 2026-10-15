@@ -30,7 +30,7 @@ fn drops_weak_and_catode_adverts() {
     ];
     let out = filter_reports(r);
     assert_eq!(out.len(), 1);
-    assert_eq!(out[0].bssid[0], 3);
+    assert_eq!(out[0].addr[0], 3);
 }
 
 #[test]
@@ -43,7 +43,7 @@ fn dedups_keeping_strongest_and_reads_name() {
     let out = filter_reports(r);
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].rssi, -55);
-    assert_eq!(out[0].ssid.as_str(), "TV1");
+    assert_eq!(out[0].name.as_str(), "TV1");
 }
 
 #[test]

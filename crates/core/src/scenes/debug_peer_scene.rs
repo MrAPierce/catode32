@@ -25,7 +25,7 @@ use crate::{
     input::{Button, Buttons},
     render::Renderer,
     scene::{Scene, SceneId},
-    location_tracker::format_bssid,
+    location_tracker::format_addr,
 };
 
 const LINES_VISIBLE: usize = 8;
@@ -190,7 +190,7 @@ impl Scene for DebugPeerScene {
             .peers
             .as_ref()
             .and_then(|m| m.own_id())
-            .map(|m| format_bssid(m.as_bytes()))
+            .map(|m| format_addr(m.as_bytes()))
             .unwrap_or_else(|| {
                 let mut s: String<17> = String::new();
                 let _ = s.push_str("--");

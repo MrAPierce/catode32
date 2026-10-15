@@ -24,17 +24,17 @@ pub const PET_NAME_MAX: usize = 12;
 pub const LOCATION_FAMILIAR_MAX: usize = 16;
 pub const LOCATION_RECENT_MAX: usize = 8;
 
-/// Max SSID length we persist with each tracked AP. Truncated to 16 at scan
+/// Max name length we persist with each tracked location entry. Truncated to 16 at scan
 /// time so saves round-trip cleanly.
-pub const WIFI_SSID_MAX: usize = 16;
+pub const LOCATION_NAME_MAX: usize = 16;
 
-/// One tracked access point. `b` is the BSSID (6 raw bytes; rendered as
-/// `aa:bb:cc:dd:ee:ff` in JSON), `s` is the SSID, `n` is the running
+/// One tracked location entry (WiFi AP or BLE beacon). `b` is the address (6 raw bytes; rendered as
+/// `aa:bb:cc:dd:ee:ff` in JSON), `s` is the name, `n` is the running
 /// "times seen" count subject to per-scan decay.
 #[derive(Clone, Debug)]
 pub struct LocationEntry {
-    pub bssid: [u8; 6],
-    pub ssid: heapless::String<WIFI_SSID_MAX>,
+    pub addr: [u8; 6],
+    pub name: heapless::String<LOCATION_NAME_MAX>,
     pub count: f32,
 }
 

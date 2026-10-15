@@ -30,7 +30,7 @@
 use crate::platform::time::Duration;
 use heapless::Vec;
 
-use crate::context::{GameContext, WIFI_SSID_MAX};
+use crate::context::{GameContext, LOCATION_NAME_MAX};
 use crate::context::{LocationEntry, LOCATION_FAMILIAR_MAX, LOCATION_RECENT_MAX};
 
 #[cfg(not(feature = "desktop"))]
@@ -53,13 +53,13 @@ const PROMOTE_MIN: f32 = 5.0;
 pub const WIFI_QUORUM: usize = 1;
 
 /// A source of location fingerprints (WiFi APs, BLE devices, ...). Entries
-/// reuse [`ScanAp`]: `bssid` holds the 6-byte address and `ssid` an optional
+/// reuse [`ScanBeacon`]: `addr` holds the 6-byte address and `name` an optional
 /// short name.
 pub trait LocationSensor {
     /// Minimum visible familiar entries needed to be "at home".
     fn quorum(&self) -> usize;
     /// Run one scan and update the context; `None` if the radio is unavailable.
-    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>>;
+    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>>;
 }
 
 /// WiFi access-point sensor used on C3/C6.
@@ -69,7 +69,7 @@ impl LocationSensor for WifiSensor {
     fn quorum(&self) -> usize {
         WIFI_QUORUM
     }
-    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+    fn scan(&mut self, ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
         scan_now(ctx)
     }
 }
@@ -77,9 +77,9 @@ impl LocationSensor for WifiSensor {
 /// Snapshot of the latest scan, surfaced to the debug scene so it can show
 /// signal strength + auth mode alongside the familiar/recent lists.
 #[derive(Clone)]
-pub struct ScanAp {
-    pub bssid: [u8; 6],
-    pub ssid: heapless::String<WIFI_SSID_MAX>,
+pub struct ScanBeacon {
+    pub addr: [u8; 6],
+    pub name: heapless::String<LOCATION_NAME_MAX>,
     pub rssi: i8,
 }
 
@@ -88,7 +88,7 @@ pub struct ScanAp {
 /// `loc_recent` / `in_familiar_location`. On desktop there is no
 /// radio; the call returns `None` and leaves the state untouched.
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
-pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
     use embassy_futures::block_on;
 
     if !radio::acquire(ctx) {
@@ -119,7 +119,7 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
 }
 
 #[cfg(feature = "desktop")]
-pub fn scan_now(_ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+pub fn scan_now(_ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
     None
 }
 
@@ -129,7 +129,7 @@ const BLE_SCAN_MS: u64 = 3000;
 
 #[cfg(feature = "h2")]
 struct Collector {
-    seen: core::cell::RefCell<Vec<ScanAp, 32>>,
+    seen: core::cell::RefCell<Vec<ScanBeacon, 32>>,
 }
 
 #[cfg(feature = "h2")]
@@ -143,7 +143,7 @@ impl trouble_host::prelude::EventHandler for Collector {
         {
             let mut seen = self.seen.borrow_mut();
             for ap in kept {
-                if let Some(e) = seen.iter_mut().find(|e| e.bssid == ap.bssid) {
+                if let Some(e) = seen.iter_mut().find(|e| e.addr == ap.addr) {
                     if ap.rssi > e.rssi {
                         e.rssi = ap.rssi;
                     }
@@ -158,7 +158,7 @@ impl trouble_host::prelude::EventHandler for Collector {
 /// One passive BLE scan. Brings the controller up, listens for
 /// `BLE_SCAN_MS`, then drops it (which powers the radio down).
 #[cfg(feature = "h2")]
-pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
+pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
     use crate::platform::radio::WIFI;
     use embassy_futures::{block_on, select::select};
     use esp_radio::ble::controller::BleConnector;
@@ -217,7 +217,7 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanAp, 32>> {
 #[cfg(not(any(feature = "desktop", feature = "h2")))]
 async fn perform_scan(
     controller: &mut esp_radio::wifi::WifiController<'static>,
-) -> Result<Vec<ScanAp, 32>, esp_radio::wifi::WifiError> {
+) -> Result<Vec<ScanBeacon, 32>, esp_radio::wifi::WifiError> {
     use esp_radio::wifi::{scan::ScanConfig, sta::StationConfig, Config as WifiConfig};
 
     // Apply a station config. This selects STA mode for a freshly
@@ -229,17 +229,17 @@ async fn perform_scan(
     let scan_config = ScanConfig::default().with_max(SCAN_MAX_APS);
     let result = controller.scan_async(&scan_config).await?;
 
-    let mut out: Vec<ScanAp, 32> = Vec::new();
+    let mut out: Vec<ScanBeacon, 32> = Vec::new();
     for ap in result.iter() {
-        let mut ssid: heapless::String<WIFI_SSID_MAX> = heapless::String::new();
+        let mut name: heapless::String<LOCATION_NAME_MAX> = heapless::String::new();
         for c in ap.ssid.as_str().chars() {
-            if ssid.push(c).is_err() {
+            if name.push(c).is_err() {
                 break;
             }
         }
-        let entry = ScanAp {
-            bssid: ap.bssid,
-            ssid,
+        let entry = ScanBeacon {
+            addr: ap.bssid,
+            name,
             rssi: ap.signal_strength,
         };
         if out.push(entry).is_err() {
@@ -252,15 +252,15 @@ async fn perform_scan(
 /// Decay-and-promote algorithm. Public so the debug scene's "Scan" button
 /// (or a unit test, eventually) can drive it with a synthesized AP list.
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
+pub fn process(ctx: &mut GameContext, aps: &[ScanBeacon], quorum: usize) {
     // Decay unseen entries, then prune the ones that hit zero.
     for entry in ctx.loc_familiar.iter_mut() {
-        if !aps.iter().any(|ap| ap.bssid == entry.bssid) {
+        if !aps.iter().any(|ap| ap.addr == entry.addr) {
             entry.count -= DECAY_PER_SCAN;
         }
     }
     for entry in ctx.loc_recent.iter_mut() {
-        if !aps.iter().any(|ap| ap.bssid == entry.bssid) {
+        if !aps.iter().any(|ap| ap.addr == entry.addr) {
             entry.count -= DECAY_PER_SCAN;
         }
     }
@@ -274,18 +274,18 @@ pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
         if let Some(e) = ctx
             .loc_familiar
             .iter_mut()
-            .find(|e| e.bssid == ap.bssid)
+            .find(|e| e.addr == ap.addr)
         {
             e.count += 1.0;
             continue;
         }
-        if let Some(e) = ctx.loc_recent.iter_mut().find(|e| e.bssid == ap.bssid) {
+        if let Some(e) = ctx.loc_recent.iter_mut().find(|e| e.addr == ap.addr) {
             e.count += 1.0;
             continue;
         }
         let new_entry = LocationEntry {
-            bssid: ap.bssid,
-            ssid: ap.ssid.clone(),
+            addr: ap.addr,
+            name: ap.name.clone(),
             count: 1.0,
         };
         if ctx.loc_recent.len() < LOCATION_RECENT_MAX {
@@ -330,7 +330,7 @@ pub fn process(ctx: &mut GameContext, aps: &[ScanAp], quorum: usize) {
     ctx.in_familiar_location = ctx
         .loc_familiar
         .iter()
-        .filter(|e| aps.iter().any(|ap| ap.bssid == e.bssid))
+        .filter(|e| aps.iter().any(|ap| ap.addr == e.addr))
         .count()
         >= quorum.max(1);
 }
@@ -347,9 +347,9 @@ fn lowest_idx<const N: usize>(v: &Vec<LocationEntry, N>) -> Option<usize> {
     best.map(|(i, _)| i)
 }
 
-/// Format a BSSID as `aa:bb:cc:dd:ee:ff`. Used by the save layer and the
+/// Format a 6-byte address as `aa:bb:cc:dd:ee:ff`. Used by the save layer and the
 /// debug scene.
-pub fn format_bssid(b: &[u8; 6]) -> heapless::String<17> {
+pub fn format_addr(b: &[u8; 6]) -> heapless::String<17> {
     use core::fmt::Write;
     let mut s: heapless::String<17> = heapless::String::new();
     for (i, byte) in b.iter().enumerate() {
@@ -363,7 +363,7 @@ pub fn format_bssid(b: &[u8; 6]) -> heapless::String<17> {
 
 /// Parse `aa:bb:cc:dd:ee:ff` (case-insensitive). Returns None if malformed.
 /// Used by the save layer to reconstitute persisted wifi entries.
-pub fn parse_bssid(s: &str) -> Option<[u8; 6]> {
+pub fn parse_addr(s: &str) -> Option<[u8; 6]> {
     let mut out = [0u8; 6];
     let mut parts = s.split(':');
     for slot in out.iter_mut() {
