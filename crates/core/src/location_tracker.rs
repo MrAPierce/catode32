@@ -164,12 +164,12 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
     use esp_radio::ble::controller::BleConnector;
     use trouble_host::prelude::*;
 
-    let bt = ctx.wifi_peripheral.take()?;
+    let bt = ctx.radio_peripheral.take()?;
     let connector = match BleConnector::new(bt, Default::default()) {
         Ok(c) => c,
         Err(e) => {
             println!("[BLE] init failed: {:?}", e);
-            ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+            ctx.radio_peripheral = Some(unsafe { WIFI::steal() });
             return None;
         }
     };
@@ -200,7 +200,7 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
             println!("[BLE] runner error");
         }
     }
-    ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+    ctx.radio_peripheral = Some(unsafe { WIFI::steal() });
 
     let aps = collector.seen.borrow().clone();
     process(ctx, &aps, crate::ble_filter::BLE_QUORUM);

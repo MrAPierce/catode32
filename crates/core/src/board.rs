@@ -48,7 +48,7 @@ mod firmware {
         pub flash: FLASH<'static>,
         pub timg0: TIMG0<'static>,
         pub sw_int0: FROM_CPU_INTR0<'static>,
-        pub wifi: WIFI<'static>,
+        pub radio: WIFI<'static>,
     }
 
     pub fn init(peripherals: Peripherals) -> Board {
@@ -118,9 +118,9 @@ mod firmware {
             timg0: peripherals.TIMG0,
             sw_int0: peripherals.FROM_CPU_INTR0,
             #[cfg(not(feature = "h2"))]
-            wifi: peripherals.WIFI,
+            radio: peripherals.WIFI,
             #[cfg(feature = "h2")]
-            wifi: peripherals.BT,
+            radio: peripherals.BT,
         }
     }
 }

@@ -633,7 +633,7 @@ pub struct GameContext {
     /// Stash for the WiFi peripheral while the radio is off. `wifi::new`
     /// consumes this on acquire; teardown steals it back via
     /// `WIFI::steal()` so the next acquire can re-init.
-    pub wifi_peripheral: Option<WIFI<'static>>,
+    pub radio_peripheral: Option<WIFI<'static>>,
 
     /// Refcount of how many subsystems currently want the radio up.
     /// Bumped by [`crate::radio::acquire`], decremented by
@@ -790,7 +790,7 @@ impl GameContext {
             last_crash: None,
             peers: None,
             wifi: None,
-            wifi_peripheral: None,
+            radio_peripheral: None,
             radio_users: 0,
             visit: None,
 

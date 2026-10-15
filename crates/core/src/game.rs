@@ -69,7 +69,7 @@ impl Game {
         buttons: Buttons,
         rng: Rng,
         led: Led,
-        wifi_peripheral: WIFI<'static>,
+        radio_peripheral: WIFI<'static>,
         peers: PeerManager,
     ) -> Self {
         let mut context = GameContext::new(led);
@@ -79,7 +79,7 @@ impl Game {
         context.rng = if seed == 0 { 1 } else { seed };
         context.hw_rng = rng;
         context.peers = Some(peers);
-        context.wifi_peripheral = Some(wifi_peripheral);
+        context.radio_peripheral = Some(radio_peripheral);
         let (reset_label, brownout) = persist::reset_reason();
         println!("[Boot] Reset reason: {}", reset_label);
         context.last_reset_reason = reset_label;

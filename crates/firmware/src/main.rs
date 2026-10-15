@@ -48,7 +48,7 @@ fn main() -> ! {
         board.buttons,
         board.rng,
         board.led,
-        board.wifi,
+        board.radio,
         PeerManager::new(),
     )
     .run();

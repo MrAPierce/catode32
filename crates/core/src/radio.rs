@@ -5,7 +5,7 @@
 //! module owns that drop/recreate dance so the rest of the codebase can
 //! request the radio without thinking about it.
 //!
-//! At rest, the WiFi peripheral handle sits in `ctx.wifi_peripheral` and
+//! At rest, the WiFi peripheral handle sits in `ctx.radio_peripheral` and
 //! the radio is fully off. The first call to [`acquire`] consumes the
 //! peripheral via `WifiController::new`, parks the new controller into
 //! `ctx.wifi`, and binds the freshly-minted ESP-NOW handle onto
@@ -61,7 +61,7 @@ mod firmware {
     }
 
     fn init_radio(ctx: &mut GameContext) -> bool {
-        let Some(peripheral) = ctx.wifi_peripheral.take() else {
+        let Some(peripheral) = ctx.radio_peripheral.take() else {
             println!("[radio] no wifi peripheral available");
             return false;
         };
@@ -76,7 +76,7 @@ mod firmware {
             }
             Err(e) => {
                 println!("[radio] WifiController::new failed: {:?}", e);
-                ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+                ctx.radio_peripheral = Some(unsafe { WIFI::steal() });
                 false
             }
         }
@@ -87,7 +87,7 @@ mod firmware {
             drop(peers.detach());
         }
         drop(ctx.wifi.take());
-        ctx.wifi_peripheral = Some(unsafe { WIFI::steal() });
+        ctx.radio_peripheral = Some(unsafe { WIFI::steal() });
     }
 }
 
@@ -113,7 +113,7 @@ mod ble {
     /// Bring BLE up (or bump the refcount). `true` if usable on exit.
     pub fn acquire(ctx: &mut GameContext) -> bool {
         if ctx.radio_users == 0 {
-            let Some(bt) = ctx.wifi_peripheral.take() else {
+            let Some(bt) = ctx.radio_peripheral.take() else {
                 println!("[radio] BT peripheral unavailable");
                 return false;
             };
@@ -126,7 +126,7 @@ mod ble {
                 }
                 Err(e) => {
                     println!("[radio] BLE init failed: {:?}", e);
-                    ctx.wifi_peripheral = Some(unsafe { BT::steal() });
+                    ctx.radio_peripheral = Some(unsafe { BT::steal() });
                     return false;
                 }
             }
@@ -146,7 +146,7 @@ mod ble {
                 m.deactivate();
                 m.detach();
             }
-            ctx.wifi_peripheral = Some(unsafe { BT::steal() });
+            ctx.radio_peripheral = Some(unsafe { BT::steal() });
         }
     }
 }

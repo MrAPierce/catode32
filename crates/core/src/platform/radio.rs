@@ -18,7 +18,7 @@ mod desktop {
     use core::marker::PhantomData;
 
     /// Stub for `esp_hal::peripherals::WIFI<'a>`. Desktop builds need a
-    /// value to feed `Game::new`'s `wifi_peripheral` parameter, but the
+    /// value to feed `Game::new`'s `radio_peripheral` parameter, but the
     /// stub is never read. `radio::acquire` is a no-op on desktop.
     pub struct WIFI<'a>(PhantomData<&'a ()>);
 
