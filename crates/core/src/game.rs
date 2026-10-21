@@ -308,13 +308,16 @@ impl Game {
                 }
                 if self.sleep_pending {
                     self.sleep_pending = false;
-                    self.sleep_manager.enter_sleep(
+                    let go_deep = self.sleep_manager.enter_sleep(
                         &mut self.renderer,
                         &mut self.buttons,
                         &mut self.context,
                         &mut self.scene_manager,
                         &mut self.time_system,
                     );
+                    if go_deep {
+                        self.enter_deep_sleep();
+                    }
                     // Replace the auto-advanced `In` phase with a fresh
                     // in-only reveal so the wake fade plays from full black.
                     self.transition.start_in_only();
