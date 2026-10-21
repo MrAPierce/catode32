@@ -8,6 +8,7 @@ use crate::platform::{
 };
 
 use crate::{
+    catch_up,
     context::{GameContext, PowerAction},
     peer_manager::PeerManager,
     input::Buttons,
@@ -93,6 +94,19 @@ impl Game {
 
         let loaded = save::has_save() && save::load(&mut context);
 
+        // A valid sleep stamp means this boot is a wake from deep sleep.
+        // Land on the home scene and catch the pet up on the time asleep.
+        let mut time_system = TimeSystem::new();
+        let slept_us = persist::sleep_record_take().filter(|_| loaded);
+        if let Some(start_us) = slept_us {
+            let elapsed_s = persist::rtc_now_us().saturating_sub(start_us) as f32 / 1.0e6;
+            println!("[Boot] Woke from deep sleep after {}s", elapsed_s as u32);
+            time_system.advance(&mut context, elapsed_s);
+            context.apply_stat_changes(&catch_up::catch_up(elapsed_s));
+            context.pending_wake_greeting = true;
+            persist::intent_clear();
+        }
+
         // Resume a scene change that a reset interrupted. Capped so a scene
         // that crashes on entry gets at most MAX_RESUME_ATTEMPTS boots before
         // we fall back to the normal start scene.
@@ -138,7 +152,7 @@ impl Game {
             buttons,
             context,
             scene_manager,
-            time_system: TimeSystem::new(),
+            time_system,
             sleep_manager: SleepManager::new(),
             transition: TransitionManager::new(),
             pending_scene: None,
@@ -423,6 +437,8 @@ impl Game {
         };
 
         println!("[Power] Entering deep sleep");
+        save::save(&mut self.context);
+        persist::sleep_record_set(persist::rtc_now_us());
         self.renderer.clear();
         self.renderer.flush();
         self.renderer.power_off();
