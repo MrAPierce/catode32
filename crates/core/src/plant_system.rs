@@ -743,7 +743,7 @@ pub fn inspect_lines(plant: &Plant) -> InspectLines {
             t!("Water: Full")
         } else if debt < wilt / 3.0 {
             t!("Water: OK")
-        } else if debt < wilt * 2.0 / 3.0 {
+        } else if !water_urgent(&spec, debt) {
             t!("Water: Low")
         } else {
             t!("Water: Urgent")
@@ -753,6 +753,24 @@ pub fn inspect_lines(plant: &Plant) -> InspectLines {
 
     push_prefixed(&mut out, t!("Fert: "), fert_label(plant.fertilizer));
     out
+}
+
+/// Debt at which a healthy plant reads "Water: Urgent".
+fn water_urgent(spec: &PlantTypeSpec, debt: f32) -> bool {
+    debt >= spec.wilt as f32 * 2.0 / 3.0
+}
+
+/// Stage used to pick the plant's sprite. A healthy plant at "Urgent" water
+/// shows its wilted art before it actually wilts.
+pub fn display_stage(plant: &Plant) -> PlantStage {
+    match plant.seed {
+        Some(seed)
+            if !plant.stage.is_wilted() && water_urgent(&spec_for(seed), plant.water_debt) =>
+        {
+            plant.stage.wilted_variant()
+        }
+        _ => plant.stage,
+    }
 }
 
 /// Lookup helper used by menu action handlers.

@@ -168,7 +168,7 @@ checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 
 [[package]]
 name = "catode32-core"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "bt-hci",
  "catode32-i18n-macros",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "catode32-desktop"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "catode32-core",
  "embedded-graphics",
@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "catode32-firmware"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "catode32-core",
  "esp-alloc",
@@ -217,7 +217,7 @@ dependencies = [
 
 [[package]]
 name = "catode32-i18n-macros"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "proc-macro2",
  "quote",

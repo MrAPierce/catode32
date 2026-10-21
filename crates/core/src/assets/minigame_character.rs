@@ -157,3 +157,16 @@ pub static PLATFORMER_STRIKE: Sprite = Sprite {
     frames: PLATFORMER_STRIKE_FRAMES,
     fill_frames: None,
 };
+
+// Placeholder lander cat for Lucky Landing: an outlined body with a leg at
+// the front and back. Leg tips sit on the bottom row.
+const LANDER_CAT_FRAMES: &[&[u8]] = &[
+    b"\xff\xf0\x80\x10\x80\x10\xff\xf0\x40\x20\x40\x20",
+];
+
+pub static LANDER_CAT: Sprite = Sprite {
+    width: 12,
+    height: 6,
+    frames: LANDER_CAT_FRAMES,
+    fill_frames: None,
+};

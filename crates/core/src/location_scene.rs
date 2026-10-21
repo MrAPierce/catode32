@@ -1017,6 +1017,7 @@ impl LocationScene {
     fn reenter_tend_selection(&mut self, ctx: &GameContext) {
         let found = self.selection.enter(
             ctx,
+            &mut self.environment,
             self.scene_id,
             SelectionFilter::All,
             self.last_tended_plant_id,
@@ -1072,7 +1073,7 @@ impl LocationScene {
             }
             LocationAction::Play(variant) => {
                 self.behaviors.trigger(
-                    NextBehavior::Playing(variant),
+                    NextBehavior::Playing(variant, false),
                     ctx,
                     &mut self.character,
                 );
@@ -1113,9 +1114,13 @@ impl LocationScene {
                     return None;
                 }
                 self.pending_ground_seed = Some(seed);
-                let found =
-                    self.selection
-                        .enter(ctx, self.scene_id, SelectionFilter::EmptyPot, None);
+                let found = self.selection.enter(
+                    ctx,
+                    &mut self.environment,
+                    self.scene_id,
+                    SelectionFilter::EmptyPot,
+                    None,
+                );
                 if !found {
                     self.pending_ground_seed = None;
                     self.show_popup(t!("No empty pots in this location"));
@@ -1137,6 +1142,7 @@ impl LocationScene {
                 self.in_tend_mode = true;
                 let found = self.selection.enter(
                     ctx,
+                    &mut self.environment,
                     self.scene_id,
                     SelectionFilter::All,
                     self.last_tended_plant_id,

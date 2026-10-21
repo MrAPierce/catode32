@@ -94,7 +94,7 @@ crate::dispatch_enum! {
         Mischief(MischiefBehavior)                      = MischiefBehavior::new(),
         Hiding(HidingBehavior)                          = HidingBehavior::new(),
         Training(TrainingBehavior)(kind)                = TrainingBehavior::new(kind),
-        Playing(PlayingBehavior)(variant)               = PlayingBehavior::new(variant),
+        Playing(PlayingBehavior)(variant, self_initiated) = PlayingBehavior::new(variant, self_initiated),
         Affection(AffectionBehavior)(variant)           = AffectionBehavior::new(variant),
         Attention(AttentionBehavior)(variant)           = AttentionBehavior::new(variant),
         Eating(EatingBehavior)(source)                  = EatingBehavior::new(source),
@@ -267,7 +267,7 @@ pub fn auto_select(ctx: &mut GameContext) -> NextBehavior {
         if !solo.is_empty() {
             let i = rand::rand_range_u32(&mut ctx.rng, 0, (solo.len() - 1) as u32) as usize;
             let variant = solo[i].to_play_variant();
-            return NextBehavior::Playing(variant);
+            return NextBehavior::Playing(variant, true);
         }
     }
     to_next_default(chosen)

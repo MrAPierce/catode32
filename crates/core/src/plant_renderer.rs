@@ -8,7 +8,7 @@ use crate::{
     assets::plants::{plant_sprite, pot_sprite, PotKind},
     context::GameContext,
     environment::Environment,
-    plant_system::PlantLayer,
+    plant_system::{display_stage, PlantLayer},
     render::{Renderer, Sprite, SpriteOpts},
     scene::SceneId,
 };
@@ -57,7 +57,7 @@ pub fn draw_plants_layer(
         };
 
         if let Some(seed) = plant.seed {
-            if let Some(spr) = plant_sprite(seed, plant.stage) {
+            if let Some(spr) = plant_sprite(seed, display_stage(plant)) {
                 draw_plant_sprite(renderer, spr, center_x, plant.y_snap - pot_h, plant.mirror);
             }
         }

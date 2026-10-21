@@ -1,6 +1,6 @@
 [package]
 name = "catode32-core"
-version = "0.12.0"
+version = "0.13.0"
 edition = "2021"
 description = "Core game logic for catode32 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â shared between firmware and desktop builds"
 license = "MIT"

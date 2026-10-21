@@ -18,6 +18,7 @@ pub mod herding_scene;
 pub mod inside_scene;
 pub mod kitchen_scene;
 pub mod lightsout_scene;
+pub mod luckylanding_scene;
 pub mod maze_scene;
 pub mod memory_scene;
 pub mod meowltiply_scene;
@@ -27,11 +28,14 @@ pub mod pet_info_scene;
 pub mod pipes_scene;
 pub mod platformer_scene;
 pub mod pose_scene;
+pub mod purrimeter_scene;
+pub mod reversi_scene;
 pub mod snake_scene;
 pub mod social_scene;
 pub mod stats_scene;
 pub mod store_scene;
 pub mod sudokat_scene;
+pub mod sunnyspot_scene;
 pub mod tictactoe_scene;
 pub mod treehouse_scene;
 pub mod vacation_aquarium_scene;
@@ -63,6 +67,7 @@ use herding_scene::HerdingScene;
 use inside_scene::InsideScene;
 use kitchen_scene::KitchenScene;
 use lightsout_scene::LightsOutScene;
+use luckylanding_scene::LuckyLandingScene;
 use maze_scene::MazeScene;
 use memory_scene::MemoryScene;
 use meowltiply_scene::MeowltiplyScene;
@@ -72,11 +77,14 @@ use pet_info_scene::PetInfoScene;
 use pipes_scene::PipesScene;
 use platformer_scene::PlatformerScene;
 use pose_scene::PoseScene;
+use purrimeter_scene::PurrimeterScene;
+use reversi_scene::ReversiScene;
 use snake_scene::SnakeScene;
 use social_scene::SocialScene;
 use stats_scene::StatsScene;
 use store_scene::StoreScene;
 use sudokat_scene::SudokatScene;
+use sunnyspot_scene::SunnySpotScene;
 use tictactoe_scene::TicTacToeScene;
 use treehouse_scene::TreehouseScene;
 use vacation_aquarium_scene::VacationAquariumScene;
@@ -125,6 +133,10 @@ crate::dispatch_enum! {
         Herding(HerdingScene)                     = HerdingScene::new(),
         Meowltiply(MeowltiplyScene)               = MeowltiplyScene::new(),
         Sudokat(SudokatScene)                     = SudokatScene::new(),
+        Reversi(ReversiScene)                     = ReversiScene::new(),
+        SunnySpot(SunnySpotScene)                 = SunnySpotScene::new(),
+        Purrimeter(PurrimeterScene)               = PurrimeterScene::new(),
+        LuckyLanding(LuckyLandingScene)           = LuckyLandingScene::new(),
         Platformer(PlatformerScene)               = PlatformerScene::new(),
         VacationPark(VacationParkScene)           = VacationParkScene::new(),
         VacationForest(VacationForestScene)       = VacationForestScene::new(),

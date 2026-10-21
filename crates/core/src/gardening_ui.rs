@@ -15,7 +15,7 @@ use crate::{
     context::GameContext,
     environment::Environment,
     input::{Button, Buttons},
-    plant_system::{Plant, PlantLayer},
+    plant_system::{display_stage, Plant, PlantLayer},
     render::{Renderer, SpriteOpts},
     scene::SceneId,
 };
@@ -343,10 +343,12 @@ impl PlantSelectionMode {
     }
 
     /// Returns true if at least one plant matched. Pre-populates the cursor
-    /// at `start_plant_id` if it's still selectable, otherwise index 0.
+    /// at `start_plant_id` if it's still selectable, otherwise index 0, and
+    /// pans the camera to it if it's off-screen.
     pub fn enter(
         &mut self,
         ctx: &GameContext,
+        env: &mut Environment,
         scene: SceneId,
         filter: SelectionFilter,
         start_plant_id: Option<u32>,
@@ -375,7 +377,23 @@ impl PlantSelectionMode {
             .unwrap_or(0);
         self.active = true;
         self.bounce_t = 0.0;
+        if !self.selected_on_screen(ctx, env) {
+            self.follow_camera(ctx, env);
+        }
         true
+    }
+
+    fn selected_on_screen(&self, ctx: &GameContext, env: &Environment) -> bool {
+        let plant = match self
+            .current_id()
+            .and_then(|id| ctx.plants.iter().find(|p| p.id == id))
+        {
+            Some(p) => p,
+            None => return true,
+        };
+        let sx = plant.x - (env.camera_x as f32 * plant.layer.parallax()) as i32;
+        let pot_w = pot_sprite(plant.pot).map(|s| s.width as i32).unwrap_or(0);
+        sx >= 0 && sx + pot_w <= DISPLAY_WIDTH
     }
 
     pub fn cancel(&mut self) {
@@ -465,7 +483,7 @@ impl PlantSelectionMode {
             // Ground plant uses the plant sprite height as the icon offset.
             let h = plant
                 .seed
-                .and_then(|s| plant_sprite(s, plant.stage))
+                .and_then(|s| plant_sprite(s, display_stage(plant)))
                 .map(|s| s.height as i32)
                 .unwrap_or(0);
             (0, h)
@@ -563,7 +581,7 @@ impl PlantBursts {
             let pot_h = pot_sprite(plant.pot).map(|s| s.height as i32).unwrap_or(0);
             let plant_h = plant
                 .seed
-                .and_then(|s| plant_sprite(s, plant.stage))
+                .and_then(|s| plant_sprite(s, display_stage(plant)))
                 .map(|s| s.height as i32)
                 .unwrap_or(0);
             let pot_w = pot_sprite(plant.pot).map(|s| s.width as i32).unwrap_or(0);

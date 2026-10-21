@@ -182,7 +182,8 @@ pub enum NextBehavior {
     Hearing(Option<&'static str>),
     Startled,
     Greeting,
-    Playing(PlayVariant),
+    /// bool: self_initiated (cat chose to play; never rejects its own toy).
+    Playing(PlayVariant, bool),
     Affection(AffectionVariant),
     Attention(AttentionVariant),
     BeingGroomed,

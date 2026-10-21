@@ -175,6 +175,8 @@ enum Phase {
 
 pub struct PlayingBehavior {
     variant: PlayVariant,
+    /// Cat chose to play on its own, so skip the rejection roll.
+    self_initiated: bool,
     phase: Phase,
     phase_timer: f32,
     session_timer: f32,
@@ -234,9 +236,10 @@ struct Bubble {
 }
 
 impl PlayingBehavior {
-    pub fn new(variant: PlayVariant) -> Self {
+    pub fn new(variant: PlayVariant, self_initiated: bool) -> Self {
         Self {
             variant,
+            self_initiated,
             phase: Phase::Excited,
             phase_timer: 0.0,
             session_timer: 0.0,
@@ -979,7 +982,7 @@ impl Behavior for PlayingBehavior {
         self.bubbles.clear();
 
         let chance = Self::rejection_chance(ctx);
-        self.rejecting = rand::rand_f32(&mut ctx.rng) < chance;
+        self.rejecting = !self.self_initiated && rand::rand_f32(&mut ctx.rng) < chance;
 
         match self.variant {
             PlayVariant::Ball => {

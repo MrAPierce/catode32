@@ -524,17 +524,8 @@ fn build_page(
             let outside = matches!(current_scene, Some(SceneId::Outside));
             let has_any_seed = ctx.seeds.iter().any(|n| *n > 0);
             if has_any_seed {
-                let has_empty_pot = current_scene
-                    .map(|s| {
-                        ctx.plants
-                            .iter()
-                            .any(|p| p.scene == s && p.stage == PlantStage::EmptyPot)
-                    })
-                    .unwrap_or(false);
-                if has_empty_pot {
-                    push_item(items, t!("In Pot"), Some(icons::TREES), None,
-                              Some(Page::GardeningPlantSeedInPot), None);
-                }
+                push_item(items, t!("In Pot"), Some(icons::TREES), None,
+                          Some(Page::GardeningPlantSeedInPot), None);
                 if outside {
                     push_item(items, t!("In Ground"), Some(icons::TREES), None,
                               Some(Page::GardeningPlantSeedInGround), None);
@@ -542,6 +533,17 @@ fn build_page(
             }
         }
         Page::GardeningPlantSeedInPot => {
+            let has_empty_pot = current_scene
+                .map(|s| {
+                    ctx.plants
+                        .iter()
+                        .any(|p| p.scene == s && p.stage == PlantStage::EmptyPot)
+                })
+                .unwrap_or(false);
+            if !has_empty_pot {
+                push_item(items, t!("(none available)"), None, None, None, None);
+                return;
+            }
             for &seed in ALL_SEEDS {
                 let count = ctx.seeds[seed as usize];
                 if count == 0 {

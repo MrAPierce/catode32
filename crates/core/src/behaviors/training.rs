@@ -180,7 +180,7 @@ impl Behavior for TrainingBehavior {
         let mut rng = ctx.rng;
         if rand::rand_f32(&mut rng) < 0.5 {
             // Toy variant kept as Mouse until inventory exists.
-            Some(NextBehavior::Playing(crate::behavior::PlayVariant::Mouse))
+            Some(NextBehavior::Playing(crate::behavior::PlayVariant::Mouse, false))
         } else {
             None
         }
