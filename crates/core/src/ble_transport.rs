@@ -117,16 +117,15 @@ impl Shared {
 
     /// Handle a scanned advertisement. A new (id, seq) with a payload is a
     /// broadcast frame; repeats of the same advert are ignored.
-    pub fn ingest_advert(&mut self, adv: &[u8]) {
-        let Some((id, seq, payload)) = ble_proto::parse_advert(adv) else {
-            return;
-        };
+    /// Returns `(peer, seq, payload_len)` when the advert was new.
+    pub fn ingest_advert(&mut self, adv: &[u8]) -> Option<(u16, u16, usize)> {
+        let (id, seq, payload) = ble_proto::parse_advert(adv)?;
         let id = ble_proto::short_id(id);
         if id == self.own {
-            return;
+            return None;
         }
         match self.seen.iter_mut().find(|(i, _)| *i == id) {
-            Some(e) if e.1 == seq => return,
+            Some(e) if e.1 == seq => return None,
             Some(e) => e.1 = seq,
             None => {
                 if self.seen.is_full() {
@@ -138,6 +137,7 @@ impl Shared {
         if !payload.is_empty() {
             self.push_inbox(id, payload);
         }
+        Some((id, seq as u16, payload.len()))
     }
 
     pub fn drain(&mut self) -> Vec<InboxItem, INBOX_CAPACITY> {
@@ -194,7 +194,9 @@ mod driver {
         fn on_adv_reports(&self, reports: bt_hci::param::LeAdvReportsIter) {
             let mut s = self.0.borrow_mut();
             for r in reports.filter_map(|r| r.ok()) {
-                s.ingest_advert(r.data);
+                if let Some((id, seq, len)) = s.ingest_advert(r.data) {
+                    println!("[BLE] heard {:04x} seq={} payload={}B", id, seq, len);
+                }
             }
         }
     }
@@ -238,6 +240,7 @@ mod driver {
                 esp_hal::delay::Delay::new().delay_millis(10);
             }
             self.driver = None;
+            println!("[BLE] detached");
             let mut s = self.sh.borrow_mut();
             s.clear_outbox();
             s.want = None;
@@ -330,12 +333,14 @@ mod driver {
             return;
         };
         let handler = Handler(&sh);
-
+        println!("[BLE] stack up, id={:04x}", own);
         let work = async {
             loop {
                 let want = sh.borrow().want;
                 if let Some(target) = want {
+                    println!("[BLE] visit -> {:04x}", target);
                     central_visit(&stack, &mut central, &sh, target).await;
+                    println!("[BLE] visit ended {:04x}", target);
                     let mut s = sh.borrow_mut();
                     s.want = None;
                     s.link = None;
@@ -356,6 +361,8 @@ mod driver {
                 if let Ok(session) = scanner.scan(&cfg).await {
                     Timer::after_millis(SCAN_MS).await;
                     drop(session);
+                } else {
+                    println!("[BLE] scan start failed");
                 }
                 central = scanner.into_inner();
             }
@@ -381,8 +388,10 @@ mod driver {
             )
             .await
         else {
+            println!("[BLE] advertise start failed");
             return;
         };
+        println!("[BLE] advertising {}B", n);
         let accepted = match select(advertiser.accept(), Timer::after_millis(ADVERTISE_MS)).await {
             Either::First(Ok(a)) => a,
             _ => return,
@@ -393,8 +402,10 @@ mod driver {
         let Some(peer) = ble_proto::id_from_address(conn.raw().peer_address().addr.raw()) else {
             return;
         };
+        println!("[BLE] connected from {:04x}", peer);
         sh.borrow_mut().link = Some(peer);
         peripheral_session(server, &conn, sh, peer).await;
+        println!("[BLE] session ended {:04x}", peer);
         let mut s = sh.borrow_mut();
         s.link = None;
         s.drop_outbox(peer);
@@ -463,8 +474,10 @@ mod driver {
             }
         };
         let Ok(client) = GattClient::<Ctrl, DefaultPacketPool, 10>::new(stack, &conn).await else {
+            println!("[BLE] gatt client failed");
             return;
         };
+        println!("[BLE] connected to {:04x}", target);
         sh.borrow_mut().link = Some(target);
 
         let session = async {
