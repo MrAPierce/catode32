@@ -47,6 +47,9 @@ const BLINK_HALF: f32 = 0.15;
 const SMART_INTELLIGENCE: f32 = 75.0;
 /// Chance a casual pet plays any line instead of a safe one.
 const CASUAL_RANDOM_PCT: u32 = 15;
+/// Chance range (scaled by intelligence) that the pet plays the endgame cleverly.
+const MIN_DEAL_PCT: u32 = 20;
+const MAX_DEAL_PCT: u32 = 90;
 
 /// Board size in boxes (rows, cols) for a level (1-based).
 fn level_params(level: u32) -> (usize, usize) {
@@ -161,20 +164,74 @@ impl Board {
         (self.count(PLAYER) + self.count(PET)) as usize == self.rows * self.cols
     }
 
+    /// Keep closing boxes for `who` until none are left to close.
+    fn greedy_take(&mut self, who: u8) -> u32 {
+        let mut taken = 0;
+        let mut free = [0u8; EDGES];
+        loop {
+            let len = self.free_lines(&mut free);
+            match free[..len].iter().find(|&&f| self.closes(f as usize) > 0) {
+                Some(&f) => taken += self.draw_line(f as usize, who) as u32,
+                None => return taken,
+            }
+        }
+    }
+
     /// Boxes the opponent collects after the pet draws `e`, if they greedily
     /// keep closing boxes until none are left to close.
     fn boxes_given(&self, e: usize) -> u32 {
         let mut b = *self;
         b.draw_line(e, PET);
-        let mut given = 0;
-        let mut free = [0u8; EDGES];
-        loop {
-            let len = b.free_lines(&mut free);
-            match free[..len].iter().find(|&&f| b.closes(f as usize) > 0) {
-                Some(&f) => given += b.draw_line(f as usize, PLAYER) as u32,
-                None => return given,
+        b.greedy_take(PLAYER)
+    }
+
+    fn is_free(&self, e: usize) -> bool {
+        self.is_valid(e) && !self.lines[e]
+    }
+
+    fn has_safe_line(&self) -> bool {
+        (0..EDGES).any(|e| self.is_free(e) && !self.gives_box(e))
+    }
+
+    /// The fewest boxes the mover can hand over with their next line.
+    fn min_give(&self) -> u32 {
+        (0..EDGES).filter(|&e| self.is_free(e)).map(|e| self.boxes_given(e)).min().unwrap_or(0)
+    }
+
+    fn three_sided(&self) -> usize {
+        (0..self.rows)
+            .flat_map(|r| (0..self.cols).map(move |c| (r, c)))
+            .filter(|&(r, c)| self.sides(r, c) == 3)
+            .count()
+    }
+
+    /// Whether the boxes marked in `region` form one piece joined by undrawn lines.
+    fn is_connected(&self, region: &[bool; MAX_ROWS * MAX_COLS]) -> bool {
+        let Some(start) = region.iter().position(|&b| b) else { return true };
+        let mut seen = [false; MAX_ROWS * MAX_COLS];
+        let mut stack = [0usize; MAX_ROWS * MAX_COLS];
+        let mut len = 1;
+        stack[0] = start;
+        seen[start] = true;
+        while len > 0 {
+            len -= 1;
+            let (r, c) = (stack[len] / MAX_COLS, stack[len] % MAX_COLS);
+            let neighbours = [
+                (r > 0).then(|| (r - 1, c, h_edge(r, c))),
+                (r + 1 < self.rows).then(|| (r + 1, c, h_edge(r + 1, c))),
+                (c > 0).then(|| (r, c - 1, v_edge(r, c))),
+                (c + 1 < self.cols).then(|| (r, c + 1, v_edge(r, c + 1))),
+            ];
+            for (nr, nc, e) in neighbours.into_iter().flatten() {
+                let i = nr * MAX_COLS + nc;
+                if !self.lines[e] && region[i] && !seen[i] {
+                    seen[i] = true;
+                    stack[len] = i;
+                    len += 1;
+                }
             }
         }
+        region.iter().zip(seen.iter()).all(|(&r, &s)| !r || s)
     }
 }
 
@@ -182,21 +239,66 @@ fn pick_random(picks: &[u8], rng: &mut u32) -> usize {
     picks[rand_range_u32(rng, 0, (picks.len() - 1) as u32) as usize] as usize
 }
 
+/// The all-but-two trick: once only the end of a chain (2 boxes) or loop
+/// (4 boxes) is left to take and every other line gives boxes away, hand those
+/// last boxes over so the opponent has to open the next chain instead.
+fn double_deal(board: &Board) -> Option<usize> {
+    let mut taken = *board;
+    let cap = taken.greedy_take(PET);
+    let mut region = [false; MAX_ROWS * MAX_COLS];
+    for (i, r) in region.iter_mut().enumerate() {
+        *r = board.owner[i] == EMPTY && taken.owner[i] != EMPTY;
+    }
+    let openings = (0..EDGES).filter(|&e| board.is_free(e) && board.closes(e) > 0).count();
+    let loop_end = cap == 4 && openings >= 2 && board.is_connected(&region);
+    if !(cap == 2 || loop_end) || taken.is_full() || taken.has_safe_line() {
+        return None;
+    }
+
+    let mut best = None;
+    let mut best_value = cap as i32 - taken.min_give() as i32;
+    for d in 0..EDGES {
+        if !board.is_free(d) || board.closes(d) > 0 {
+            continue;
+        }
+        if !board.boxes_of(d).iter().flatten().any(|&(r, c)| region[r * MAX_COLS + c]) {
+            continue;
+        }
+        let mut b = *board;
+        b.draw_line(d, PET);
+        if b.greedy_take(PLAYER) != cap {
+            continue;
+        }
+        // The player then has to open something for the pet.
+        let value = b.min_give() as i32 - cap as i32;
+        if value > best_value {
+            best_value = value;
+            best = Some(d);
+        }
+    }
+    best
+}
+
 /// Pick the pet's next line: close boxes when it can, otherwise play safe,
-/// otherwise give away as little of a chain as possible.
-fn pick_pet_line(board: &Board, random_pct: u32, rng: &mut u32) -> Option<usize> {
+/// otherwise give away as little of a chain as possible. `deal_pct` is the
+/// chance it plays the endgame cleverly (double-deals and handouts).
+fn pick_pet_line(board: &Board, random_pct: u32, deal_pct: u32, rng: &mut u32) -> Option<usize> {
     let mut free = [0u8; EDGES];
     let len = board.free_lines(&mut free);
     if len == 0 {
         return None;
     }
     let free = &free[..len];
+    let dealing = deal_pct > 0 && rand_range_u32(rng, 1, 100) <= deal_pct;
 
     let mut picks = [0u8; EDGES];
     let mut n = 0;
     // Free boxes first, preferring lines that close two at once.
     let best_close = free.iter().map(|&e| board.closes(e as usize)).max().unwrap_or(0);
     if best_close > 0 {
+        if let Some(d) = double_deal(board).filter(|_| dealing) {
+            return Some(d);
+        }
         for &e in free {
             if board.closes(e as usize) == best_close {
                 picks[n] = e;
@@ -221,15 +323,26 @@ fn pick_pet_line(board: &Board, random_pct: u32, rng: &mut u32) -> Option<usize>
         return Some(pick_random(&picks[..n], rng));
     }
 
-    // Every line gives something away; pick the smallest chain.
+    // Every line gives something away; pick the smallest chain. A clever pet
+    // opens it so more boxes are three-sided (a 2-chain in the middle), which
+    // leaves the player no last pair to hand back.
     let mut fewest = u32::MAX;
+    let mut most_open = 0;
     for &e in free {
         let given = board.boxes_given(e as usize);
-        if given < fewest {
+        let open = if dealing {
+            let mut b = *board;
+            b.draw_line(e as usize, PET);
+            b.three_sided()
+        } else {
+            0
+        };
+        if given < fewest || (given == fewest && open > most_open) {
             fewest = given;
+            most_open = open;
             n = 0;
         }
-        if given == fewest {
+        if given == fewest && open == most_open {
             picks[n] = e;
             n += 1;
         }
@@ -395,7 +508,8 @@ impl PurrimeterScene {
 
     fn make_pet_move(&mut self, rng: &mut u32) {
         let random_pct = if self.intelligence <= SMART_INTELLIGENCE { CASUAL_RANDOM_PCT } else { 0 };
-        if let Some(e) = pick_pet_line(&self.board, random_pct, rng) {
+        let deal_pct = (self.intelligence as u32).clamp(MIN_DEAL_PCT, MAX_DEAL_PCT);
+        if let Some(e) = pick_pet_line(&self.board, random_pct, deal_pct, rng) {
             let closed = self.board.draw_line(e, PET);
             self.last_pet_line = Some(e);
             self.last_pet_timer = 0.0;
@@ -683,14 +797,31 @@ mod tests {
             b.draw_line(h_edge(0, 0), PLAYER);
             b.draw_line(v_edge(0, 0), PLAYER);
             b.draw_line(h_edge(1, 0), PLAYER);
-            assert_eq!(pick_pet_line(&b, 0, &mut rng), Some(v_edge(0, 1)));
+            assert_eq!(pick_pet_line(&b, 0, 0, &mut rng), Some(v_edge(0, 1)));
 
             // A box with two sides: safe lines exist, so it isn't given away.
             let mut b = Board::new(3, 3);
             b.draw_line(h_edge(0, 0), PLAYER);
             b.draw_line(v_edge(0, 0), PLAYER);
-            let e = pick_pet_line(&b, 0, &mut rng).unwrap();
+            let e = pick_pet_line(&b, 0, 0, &mut rng).unwrap();
             assert!(!b.gives_box(e));
         }
+    }
+
+    #[test]
+    fn pet_double_deals_the_last_two_boxes() {
+        // Left column: a 2-box chain open at the bottom edge, top box ready to
+        // take. Right: a closed 2x2 loop where any line gives away all 4.
+        let mut b = Board::new(2, 3);
+        for e in [
+            h_edge(0, 0), v_edge(0, 0), v_edge(0, 1), v_edge(1, 0), v_edge(1, 1),
+            h_edge(0, 1), h_edge(0, 2), v_edge(0, 3), v_edge(1, 3), h_edge(2, 1), h_edge(2, 2),
+        ] {
+            b.draw_line(e, PLAYER);
+        }
+        let mut rng = 0x1234_5678;
+        // Taking both boxes would mean opening the loop, so hand them over instead.
+        assert_eq!(pick_pet_line(&b, 0, 100, &mut rng), Some(h_edge(2, 0)));
+        assert_eq!(pick_pet_line(&b, 0, 0, &mut rng), Some(h_edge(1, 0)));
     }
 }

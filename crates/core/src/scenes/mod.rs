@@ -18,6 +18,7 @@ pub mod hanjie_scene;
 pub mod herding_scene;
 pub mod inside_scene;
 pub mod kitchen_scene;
+pub mod laserbounce_scene;
 pub mod lightsout_scene;
 pub mod luckylanding_scene;
 pub mod maze_scene;
@@ -79,6 +80,7 @@ use meowltiply_scene::MeowltiplyScene;
 use menu_scene::MenuScene;
 use outside_scene::OutsideScene;
 use minigolf_scene::MiniGolfScene;
+use laserbounce_scene::LaserBounceScene;
 use pet_info_scene::PetInfoScene;
 use pipes_scene::PipesScene;
 use platformer_scene::PlatformerScene;
@@ -149,6 +151,7 @@ crate::dispatch_enum! {
         BalancingAct(BalancingScene)              = BalancingScene::new(),
         SleepingDogs(SleepingDogsScene)           = SleepingDogsScene::new(),
         MiniGolf(MiniGolfScene)                   = MiniGolfScene::new(),
+        LaserBounce(LaserBounceScene)             = LaserBounceScene::new(),
         Platformer(PlatformerScene)               = PlatformerScene::new(),
         VacationPark(VacationParkScene)           = VacationParkScene::new(),
         VacationForest(VacationForestScene)       = VacationForestScene::new(),
