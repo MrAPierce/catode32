@@ -1,5 +1,6 @@
 pub mod adoption_scene;
 pub mod bedroom_scene;
+pub mod balancing_scene;
 pub mod breakout_scene;
 pub mod credits_scene;
 pub mod debug_behaviors_scene;
@@ -23,6 +24,7 @@ pub mod maze_scene;
 pub mod memory_scene;
 pub mod meowltiply_scene;
 pub mod menu_scene;
+pub mod minigolf_scene;
 pub mod outside_scene;
 pub mod pet_info_scene;
 pub mod pipes_scene;
@@ -30,6 +32,7 @@ pub mod platformer_scene;
 pub mod pose_scene;
 pub mod purrimeter_scene;
 pub mod reversi_scene;
+pub mod sleepingdogs_scene;
 pub mod snake_scene;
 pub mod social_scene;
 pub mod stats_scene;
@@ -43,12 +46,14 @@ pub mod vacation_base;
 pub mod vacation_beach_scene;
 pub mod vacation_forest_scene;
 pub mod vacation_park_scene;
+pub mod yarnball_scene;
 pub mod zoomies_scene;
 
 use crate::scene::{Scene, SceneId};
 
 use adoption_scene::AdoptionScene;
 use bedroom_scene::BedroomScene;
+use balancing_scene::BalancingScene;
 use breakout_scene::BreakoutScene;
 use credits_scene::CreditsScene;
 use debug_behaviors_scene::DebugBehaviorsScene;
@@ -73,12 +78,14 @@ use memory_scene::MemoryScene;
 use meowltiply_scene::MeowltiplyScene;
 use menu_scene::MenuScene;
 use outside_scene::OutsideScene;
+use minigolf_scene::MiniGolfScene;
 use pet_info_scene::PetInfoScene;
 use pipes_scene::PipesScene;
 use platformer_scene::PlatformerScene;
 use pose_scene::PoseScene;
 use purrimeter_scene::PurrimeterScene;
 use reversi_scene::ReversiScene;
+use sleepingdogs_scene::SleepingDogsScene;
 use snake_scene::SnakeScene;
 use social_scene::SocialScene;
 use stats_scene::StatsScene;
@@ -91,6 +98,7 @@ use vacation_aquarium_scene::VacationAquariumScene;
 use vacation_beach_scene::VacationBeachScene;
 use vacation_forest_scene::VacationForestScene;
 use vacation_park_scene::VacationParkScene;
+use yarnball_scene::YarnballScene;
 use zoomies_scene::ZoomiesScene;
 
 crate::dispatch_enum! {
@@ -137,6 +145,10 @@ crate::dispatch_enum! {
         SunnySpot(SunnySpotScene)                 = SunnySpotScene::new(),
         Purrimeter(PurrimeterScene)               = PurrimeterScene::new(),
         LuckyLanding(LuckyLandingScene)           = LuckyLandingScene::new(),
+        Yarnball(YarnballScene)                   = YarnballScene::new(),
+        BalancingAct(BalancingScene)              = BalancingScene::new(),
+        SleepingDogs(SleepingDogsScene)           = SleepingDogsScene::new(),
+        MiniGolf(MiniGolfScene)                   = MiniGolfScene::new(),
         Platformer(PlatformerScene)               = PlatformerScene::new(),
         VacationPark(VacationParkScene)           = VacationParkScene::new(),
         VacationForest(VacationForestScene)       = VacationForestScene::new(),

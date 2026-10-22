@@ -185,7 +185,7 @@ struct ShootingParticle {
     life: f32,
 }
 
-struct ShootingStarEvent {
+pub(crate) struct ShootingStarEvent {
     x: f32,
     y: f32,
     max_length: f32,
@@ -198,6 +198,17 @@ struct ShootingStarEvent {
 }
 
 impl ShootingStarEvent {
+    /// A shooting star with random start, length and heading, as seen in
+    /// the outdoor sky.
+    pub(crate) fn random(rng: &mut u32) -> Self {
+        let start_x = (xorshift32(rng) % 61 + 10) as f32; // 10..=70
+        let start_y = (xorshift32(rng) % 21 + 2) as f32;  // 2..=22
+        let max_length = (xorshift32(rng) % 13 + 16) as f32; // 16..=28
+        let speed_x = (xorshift32(rng) % 17 + 20) as f32;    // 20..=36
+        let speed_y = (xorshift32(rng) % 11 + 3) as f32;     // 3..=13
+        Self::new(start_x, start_y, max_length, speed_x, speed_y)
+    }
+
     fn new(x: f32, y: f32, max_length: f32, speed_x: f32, speed_y: f32) -> Self {
         Self {
             x,
@@ -210,6 +221,10 @@ impl ShootingStarEvent {
             particle_timer: 0.0,
             active: true,
         }
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        self.active
     }
 
     fn current_length(&self) -> f32 {
@@ -231,7 +246,7 @@ impl ShootingStarEvent {
         (trail_x as i32, trail_y as i32, self.x as i32, self.y as i32)
     }
 
-    fn update(&mut self, dt: f32) {
+    pub(crate) fn update(&mut self, dt: f32) {
         self.x += self.speed_x * dt;
         self.y += self.speed_y * dt;
         self.lifetime += dt;
@@ -259,7 +274,7 @@ impl ShootingStarEvent {
         }
     }
 
-    fn draw(&self, renderer: &mut Renderer) {
+    pub(crate) fn draw(&self, renderer: &mut Renderer) {
         for p in &self.particles {
             let px = p.x as i32;
             let py = p.y as i32;
@@ -492,15 +507,9 @@ impl SkyRenderer {
     }
 
     fn spawn_shooting_star(&mut self) {
-        let start_x = (xorshift32(&mut self.rng) % 61 + 10) as f32; // 10..=70
-        let start_y = (xorshift32(&mut self.rng) % 21 + 2) as f32;  // 2..=22
-        let max_length = (xorshift32(&mut self.rng) % 13 + 16) as f32; // 16..=28
-        let speed_x = (xorshift32(&mut self.rng) % 17 + 20) as f32;    // 20..=36
-        let speed_y = (xorshift32(&mut self.rng) % 11 + 3) as f32;     // 3..=13
-        self.shooting_star = Some(ShootingStarEvent::new(
-            start_x, start_y, max_length, speed_x, speed_y,
-        ));
-        self.just_spawned_ss = Some((start_x, start_y, max_length, speed_x, speed_y));
+        let ss = ShootingStarEvent::random(&mut self.rng);
+        self.just_spawned_ss = Some((ss.x, ss.y, ss.max_length, ss.speed_x, ss.speed_y));
+        self.shooting_star = Some(ss);
     }
 
     /// Spawn a shooting star using parameters provided by an inbound

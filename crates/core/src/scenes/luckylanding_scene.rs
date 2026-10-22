@@ -1,11 +1,12 @@
 //! Lucky Landing minigame, a cat's take on Lunar Lander. The cat is falling
-//! and has to land on its feet: rotate with Left/Right, thrust with Up, and
+//! and has to land on its feet: rotate with Left/Right, float with Up or A, and
 //! touch down gently and upright on one of the flat ledges. The narrower the
 //! ledge, the bigger the score multiplier.
 //!
 //! The world is several screens wide and tall. The camera follows the cat
 //! with a dead zone, scrolling down earlier than up so landing spots come
-//! into view before the cat reaches them.
+//! into view before the cat reaches them. Stars, the moon and clouds are
+//! fixed in the sky, and grass grows on the gentler slopes.
 
 use core::fmt::Write as _;
 
@@ -19,12 +20,14 @@ use crate::{
     assets::{
         effects::{BURST1, BURST1_FRAME_DUR, POOF},
         minigame_character::LANDER_CAT,
+        nature::{CLOUD1, CLOUD2, CLOUD3, MOON},
+        plants::{GRASS_GROWING, GRASS_MATURE, GRASS_SEEDLING, GRASS_YOUNG},
     },
     board::{DISPLAY_HEIGHT, DISPLAY_WIDTH},
     context::{GameContext, StatId},
     input::{Button, Buttons},
     rand::{rand_range_f32, rand_range_u32},
-    render::{Renderer, SpriteOpts},
+    render::{Renderer, Sprite, SpriteOpts},
     scene::{Scene, SceneId},
     ui::popup::Popup,
 };
@@ -70,6 +73,9 @@ const LANDING_BASE_SCORE: f32 = 50.0;
 const CAT_HALF_W: f32 = LANDER_CAT.width as f32 / 2.0;
 const CAT_HALF_H: f32 = LANDER_CAT.height as f32 / 2.0;
 const LEG_TIPS: [(f32, f32); 2] = [(-4.5, CAT_HALF_H), (4.5, CAT_HALF_H)];
+/// LANDER_CAT's body rectangle (top 4 of its 6 rows), drawn in black under
+/// the cat so the sky doesn't show through it.
+const CAT_BODY_MASK: &[u8] = b"\xff\xf0\xff\xf0\xff\xf0\xff\xf0\x00\x00\x00\x00";
 /// Body corners relative to the cat's center, so a tumbling cat still hits
 /// the ground.
 const BODY_CORNERS: [(f32, f32); 4] = [
@@ -81,7 +87,7 @@ const BODY_CORNERS: [(f32, f32); 4] = [
 
 // Thrust sparkles
 const MAX_SPARKS: usize = 16;
-const SPARK_INTERVAL: f32 = 0.06;
+const SPARK_INTERVAL: f32 = 0.12;
 const SPARK_SPEED: f32 = 20.0;
 const SPARK_JITTER: f32 = 6.0;
 const SPARK_LIFE: f32 = BURST1_FRAME_DUR * 5.0;
@@ -109,6 +115,35 @@ const TWINKLE_CYCLE_LENGTH: u8 = 12;
 const TWINKLE_LARGE_PHASE: u8 = 10;
 const TWINKLE_SMALL_PHASES: [u8; 3] = [8, 9, 11];
 const TWINKLE_PERIOD: f32 = 0.3;
+
+// Grass tufts on gentle ground, kept clear of the ledges and their labels.
+const MAX_GRASS: usize = 24;
+static GRASS_SPRITES: [&Sprite; 4] = [&GRASS_SEEDLING, &GRASS_YOUNG, &GRASS_GROWING, &GRASS_MATURE];
+/// Most the ground may vary over any `GRASS_RUN` px under a tuft.
+const GRASS_MAX_BUMP: i16 = 1;
+const GRASS_RUN: i32 = 8;
+/// Terrain points per run window; also the shortest stretch a tuft needs.
+const GRASS_RUN_POINTS: usize = (GRASS_RUN / TERRAIN_STEP) as usize;
+/// Tufts sink this far into the ground so they don't float on small dips.
+const GRASS_SINK: i32 = 1;
+/// Terrain points kept clear on each side of a pad.
+const GRASS_PAD_MARGIN: usize = 2;
+const GRASS_CHANCE_PERCENT: u32 = 70;
+/// Terrain points skipped after a tuft so they don't bunch up.
+const GRASS_GAP: usize = 2;
+
+// Moon and clouds, fixed in the world like the stars.
+const MOON_Y: i32 = 6;
+/// Shown on a new moon so there's always a moon in the sky.
+const MOON_FULL_FRAME: usize = 3;
+/// Game moon phase (0 = new) to MOON frame, as in `sky.rs`.
+const MOON_PHASE_FRAMES: [Option<usize>; 8] =
+    [None, Some(0), Some(1), Some(2), Some(3), Some(4), Some(5), Some(6)];
+const MIN_CLOUDS: u32 = 3;
+const MAX_CLOUDS: usize = 6;
+/// Clouds stay in the top band of the sky, high above the terrain.
+const CLOUD_MAX_Y: f32 = 40.0;
+static CLOUD_SPRITES: [&Sprite; 3] = [&CLOUD1, &CLOUD2, &CLOUD3];
 
 const POOF_FRAME_DUR: f32 = 1.0 / 8.0;
 /// Seconds after touchdown before the result popup appears, so the landing
@@ -142,9 +177,18 @@ impl Pad {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Grass {
+    /// Left edge and the ground y the tuft stands on.
+    x: i16,
+    y: i16,
+    variant: u8,
+}
+
 struct Terrain {
     heights: [i16; TERRAIN_POINTS],
     pads: Vec<Pad, MAX_PADS>,
+    grass: Vec<Grass, MAX_GRASS>,
 }
 
 impl Terrain {
@@ -186,7 +230,43 @@ impl Terrain {
             }
             let _ = pads.push(Pad { i0: i0 as u16, i1: i1 as u16, y: y as i16, mult });
         }
-        Self { heights, pads }
+        let grass = Self::place_grass(rng, &heights, &pads);
+        Self { heights, pads, grass }
+    }
+
+    /// Scatter grass over stretches that are nearly flat under the whole
+    /// tuft and not next to a pad.
+    fn place_grass(rng: &mut u32, heights: &[i16; TERRAIN_POINTS], pads: &[Pad]) -> Vec<Grass, MAX_GRASS> {
+        let mut grass = Vec::new();
+        let mut i = 0;
+        while i < TERRAIN_POINTS - 1 && !grass.is_full() {
+            let variant = rand_range_u32(rng, 0, GRASS_SPRITES.len() as u32 - 1) as usize;
+            let w = GRASS_SPRITES[variant].width as i32;
+            let span = (((w + TERRAIN_STEP - 1) / TERRAIN_STEP) as usize).max(GRASS_RUN_POINTS);
+            let end = i + span;
+            let near_pad = pads.iter().any(|p| {
+                end + GRASS_PAD_MARGIN >= p.i0 as usize && i <= p.i1 as usize + GRASS_PAD_MARGIN
+            });
+            if end >= TERRAIN_POINTS || near_pad {
+                i += 1;
+                continue;
+            }
+            let ground = &heights[i..=end];
+            let bumpy = ground.windows(GRASS_RUN_POINTS + 1).any(|run| {
+                let lo = run.iter().copied().min().unwrap_or(0);
+                let hi = run.iter().copied().max().unwrap_or(0);
+                hi - lo > GRASS_MAX_BUMP
+            });
+            if bumpy || rand_range_u32(rng, 0, 99) >= GRASS_CHANCE_PERCENT {
+                i += 1;
+                continue;
+            }
+            let x = i as i32 * TERRAIN_STEP + (span as i32 * TERRAIN_STEP - w) / 2;
+            let top = ground.iter().copied().min().unwrap_or(0);
+            let _ = grass.push(Grass { x: x as i16, y: top, variant: variant as u8 });
+            i = end + GRASS_GAP;
+        }
+        grass
     }
 
     /// Ground height at world x, interpolated between terrain points.
@@ -215,6 +295,13 @@ struct Star {
 const NO_STAR: Star = Star { x: 0, y: 0, twinkles: false, phase_offset: 0 };
 
 #[derive(Clone, Copy)]
+struct Cloud {
+    sprite: &'static Sprite,
+    x: i16,
+    y: i16,
+}
+
+#[derive(Clone, Copy)]
 struct Spark {
     x: f32,
     y: f32,
@@ -229,6 +316,10 @@ pub struct LuckyLandingScene {
     stars: [Star; STAR_COUNT],
     twinkle_timer: f32,
     twinkle_phase: u8,
+    /// Moon position in the world and the frame for today's phase.
+    moon_x: i16,
+    moon_frame: usize,
+    clouds: Vec<Cloud, MAX_CLOUDS>,
     x: f32,
     y: f32,
     vx: f32,
@@ -250,10 +341,13 @@ impl LuckyLandingScene {
     pub fn new() -> Self {
         Self {
             state: State::Ready,
-            terrain: Terrain { heights: [0; TERRAIN_POINTS], pads: Vec::new() },
+            terrain: Terrain { heights: [0; TERRAIN_POINTS], pads: Vec::new(), grass: Vec::new() },
             stars: [NO_STAR; STAR_COUNT],
             twinkle_timer: 0.0,
             twinkle_phase: 0,
+            moon_x: 0,
+            moon_frame: MOON_FULL_FRAME,
+            clouds: Vec::new(),
             x: 0.0,
             y: 0.0,
             vx: 0.0,
@@ -272,9 +366,10 @@ impl LuckyLandingScene {
     }
 
     fn reset_round(&mut self, rng: &mut u32) {
-        self.state = State::Ready;
+        self.state = State::Playing;
         self.terrain = Terrain::generate(rng);
         self.generate_stars(rng);
+        self.generate_sky(rng);
         self.x = rand_range_f32(rng, 64.0, (WORLD_W - 64) as f32);
         self.y = SPAWN_Y;
         self.vx = rand_range_f32(rng, -SPAWN_DRIFT, SPAWN_DRIFT);
@@ -305,6 +400,24 @@ impl LuckyLandingScene {
         }
     }
 
+    /// Place the moon and spread the clouds across the sky.
+    fn generate_sky(&mut self, rng: &mut u32) {
+        self.moon_x = rand_range_f32(rng, 0.0, (WORLD_W - MOON.width as i32) as f32) as i16;
+
+        self.clouds.clear();
+        let count = rand_range_u32(rng, MIN_CLOUDS, MAX_CLOUDS as u32);
+        let zone = WORLD_W as f32 / count as f32;
+        for z in 0..count {
+            let sprite = CLOUD_SPRITES[rand_range_u32(rng, 0, CLOUD_SPRITES.len() as u32 - 1) as usize];
+            let x0 = z as f32 * zone;
+            let _ = self.clouds.push(Cloud {
+                sprite,
+                x: rand_range_f32(rng, x0, x0 + zone - sprite.width as f32) as i16,
+                y: rand_range_f32(rng, 0.0, CLOUD_MAX_Y - sprite.height as f32) as i16,
+            });
+        }
+    }
+
     /// Rotate a point relative to the cat's center by its angle and return
     /// it in world coordinates.
     fn to_world(&self, (lx, ly): (f32, f32)) -> (f32, f32) {
@@ -322,7 +435,7 @@ impl LuckyLandingScene {
         }
         self.angle = self.angle.clamp(-MAX_ANGLE, MAX_ANGLE);
 
-        self.thrusting = buttons.is_pressed(Button::Up) && self.fuel > 0.0;
+        self.thrusting = (buttons.is_pressed(Button::Up) || buttons.is_pressed(Button::A)) && self.fuel > 0.0;
         let mut ax = 0.0;
         let mut ay = GRAVITY;
         if self.thrusting {
@@ -475,6 +588,41 @@ impl LuckyLandingScene {
         }
     }
 
+    fn draw_moon(&self, renderer: &mut Renderer) {
+        let (cx, cy) = self.cam();
+        let x = self.moon_x as i32 - cx;
+        let y = MOON_Y - cy;
+        if x + MOON.width as i32 <= 0 || x >= DISPLAY_W || y + MOON.height as i32 <= 0 {
+            return;
+        }
+        renderer.draw_sprite(&MOON, Point::new(x, y), SpriteOpts { frame: self.moon_frame, ..Default::default() });
+    }
+
+    fn draw_clouds(&self, renderer: &mut Renderer) {
+        let (cx, cy) = self.cam();
+        for c in &self.clouds {
+            let x = c.x as i32 - cx;
+            let y = c.y as i32 - cy;
+            if x + c.sprite.width as i32 <= 0 || x >= DISPLAY_W || y + c.sprite.height as i32 <= 0 {
+                continue;
+            }
+            renderer.draw_sprite(c.sprite, Point::new(x, y), SpriteOpts::default());
+        }
+    }
+
+    fn draw_grass(&self, renderer: &mut Renderer) {
+        let (cx, cy) = self.cam();
+        for g in &self.terrain.grass {
+            let sprite = GRASS_SPRITES[g.variant as usize];
+            let x = g.x as i32 - cx;
+            if x + sprite.width as i32 <= 0 || x >= DISPLAY_W {
+                continue;
+            }
+            let y = g.y as i32 - cy - sprite.height as i32 + GRASS_SINK;
+            renderer.draw_sprite(sprite, Point::new(x, y), SpriteOpts::default());
+        }
+    }
+
     fn draw_terrain(&self, renderer: &mut Renderer) {
         let (cx, cy) = self.cam();
         let first = (cx / TERRAIN_STEP) as usize;
@@ -520,6 +668,15 @@ impl LuckyLandingScene {
             (self.x - CAT_HALF_W) as i32 - cx,
             (self.y - CAT_HALF_H) as i32 - cy,
         );
+        // Mask pixels come out black; the rest of the mask is skipped.
+        renderer.draw_sprite_raw_rotated(
+            CAT_BODY_MASK,
+            LANDER_CAT.width,
+            LANDER_CAT.height,
+            pos,
+            self.angle,
+            SpriteOpts { invert: true, transparent: true, transparent_color: true, ..Default::default() },
+        );
         renderer.draw_sprite_raw_rotated(
             LANDER_CAT.frames[0],
             LANDER_CAT.width,
@@ -558,6 +715,15 @@ impl LuckyLandingScene {
         }
     }
 
+    /// Session total in the top-left, on a cleared box so the sky behind it
+    /// doesn't get in the way.
+    fn draw_score(&self, renderer: &mut Renderer) {
+        let mut s: String<8> = String::new();
+        let _ = write!(s, "{}", self.session_score);
+        renderer.fill_rect_off(Point::new(0, 0), Size::new(s.len() as u32 * 4 + 2, 7));
+        renderer.draw_text_small(s.as_str(), Point::new(1, 0));
+    }
+
     /// Popup y for a result message, on whichever half of the screen the cat
     /// isn't in so the landing stays visible.
     fn result_popup_y(&self, height: u32) -> i32 {
@@ -573,7 +739,7 @@ impl LuckyLandingScene {
             State::Ready => {
                 // Below the spawn point; the terrain starts well under it.
                 let mut popup = Popup::new(10, 26, 108, 28);
-                popup.set_text(t!("Left/Right: turn\nUp: thrust"), false, true);
+                popup.set_text(t!("Left/Right: turn\nUp/A: float"), false, true);
                 popup.draw(renderer, false);
             }
             State::Landed if self.result_timer >= RESULT_DELAY => {
@@ -619,6 +785,13 @@ impl Scene for LuckyLandingScene {
         self.session_score = 0;
         self.reset_round(&mut rng);
         ctx.rng = rng;
+        // Only the first round waits for a press, behind the controls popup.
+        self.state = State::Ready;
+        self.moon_frame = MOON_PHASE_FRAMES
+            .get(ctx.moon_phase as usize)
+            .copied()
+            .flatten()
+            .unwrap_or(MOON_FULL_FRAME);
     }
 
     fn exit(&mut self, ctx: &mut GameContext) {
@@ -666,10 +839,14 @@ impl Scene for LuckyLandingScene {
 
     fn draw(&self, _ctx: &GameContext, renderer: &mut Renderer, _dt_ms: u64) {
         self.draw_stars(renderer);
+        self.draw_moon(renderer);
+        self.draw_clouds(renderer);
         self.draw_terrain(renderer);
+        self.draw_grass(renderer);
         self.draw_sparks(renderer);
         self.draw_cat(renderer);
         self.draw_fuel(renderer);
+        self.draw_score(renderer);
         self.draw_popup(renderer);
     }
 }
@@ -692,6 +869,11 @@ mod tests {
                 assert!(p.i0 > prev_end && (p.i1 as usize) < TERRAIN_POINTS);
                 assert!(t.heights[p.i0 as usize..=p.i1 as usize].iter().all(|&h| h == p.y));
                 prev_end = p.i1;
+            }
+            for g in &t.grass {
+                let x0 = g.x as f32;
+                let x1 = x0 + GRASS_SPRITES[g.variant as usize].width as f32;
+                assert!(t.pads.iter().all(|p| x1 < p.x0() || x0 > p.x1()));
             }
         }
     }
