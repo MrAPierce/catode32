@@ -102,7 +102,9 @@ impl Game {
         let (reset_label, brownout) = persist::reset_reason();
         println!("[Boot] Reset reason: {}", reset_label);
         context.last_reset_reason = reset_label;
+        println!("[DBG] before crash_take");
         context.last_crash = persist::crash_take();
+        println!("[DBG] after crash_take");
         if let Some(crash) = &context.last_crash {
             println!("[Boot] Previous reset was a panic: {}", crash.msg);
             for pc in crash.pcs.iter() {
@@ -110,7 +112,10 @@ impl Game {
             }
         }
 
-        let loaded = save::has_save() && save::load(&mut context);
+        let hs = save::has_save();
+        println!("[DBG] has_save = {}", hs);
+        let loaded = hs && save::load(&mut context);
+        println!("[DBG] loaded = {}", loaded);
 
         // A valid sleep stamp means this boot is a wake from deep sleep.
         // Land on the home scene and catch the pet up on the time asleep.

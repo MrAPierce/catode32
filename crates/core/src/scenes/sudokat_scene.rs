@@ -17,7 +17,7 @@ use crate::{
     context::{GameContext, StatId},
     entities::character::Character,
     input::{Button, Buttons},
-    rand::xorshift32,
+    rand::{rand_bool, rand_range_f32, rand_range_u32, xorshift32},
     render::{Renderer, SpriteOpts},
     scene::{Scene, SceneId},
     ui::menu::{Menu, MenuItem, MenuResult},
@@ -39,6 +39,29 @@ const ERASE: u8 = 10;
 /// Search nodes one uniqueness check may visit before it gives up and
 /// treats the puzzle as ambiguous. Keeps generation time bounded on device.
 const SEARCH_BUDGET: u32 = 20_000;
+
+/// Poses the cat drifts between while a board is in progress.
+const IDLE_POSES: &[PoseId] = &[
+    PoseId::SittingSideHappy,
+    PoseId::SittingSideLookingDown,
+    PoseId::SittingForwardHappy,
+    PoseId::SittingSillySideNeutral,
+    PoseId::SittingSillySideHappy,
+    PoseId::SittingSillySideAloof,
+    PoseId::SittingLickingSideLickingLeg,
+    PoseId::LayingSideNeutral,
+    PoseId::LayingSideNeutral2,
+    PoseId::LayingSideAloof,
+    PoseId::LayingSideBored,
+    PoseId::LayingSideBliss,
+    PoseId::LayingSideSulking,
+    PoseId::SleepingSideSploot,
+    PoseId::SleepingSideModest,
+    PoseId::KneadingSideNeutral,
+];
+/// Seconds between pose rolls. Half the rolls keep the current pose.
+const POSE_MIN_SECS: f32 = 60.0;
+const POSE_MAX_SECS: f32 = 240.0;
 
 // Board layout.
 const PITCH: i32 = 7;
@@ -142,6 +165,10 @@ const OPTIONS_ITEMS: &[MenuItem<SudokatAction>] = &[
 pub struct SudokatScene {
     character: Character,
     win_popup: Popup,
+    /// Resting pose while playing, swapped on a timer so long boards aren't static.
+    idle_pose: PoseId,
+    pose_timer: f32,
+    pose_change_in: f32,
 
     givens: Grid,
     entries: Grid,
@@ -163,6 +190,9 @@ impl SudokatScene {
         Self {
             character: Character::new(Point::new(100, 63)),
             win_popup: Popup::new(10, 14, 108, 36),
+            idle_pose: PoseId::SittingSideNeutral,
+            pose_timer: 0.0,
+            pose_change_in: POSE_MIN_SECS,
 
             givens: [0; CELLS],
             entries: [0; CELLS],
@@ -196,7 +226,8 @@ impl SudokatScene {
         self.cursor = CELLS / 2;
         self.mode = Mode::Board;
         self.state = State::Playing;
-        self.character.set_pose(PoseId::SittingSideNeutral);
+        self.idle_pose = PoseId::SittingSideNeutral;
+        self.character.set_pose(self.idle_pose);
         self.store(ctx);
     }
 
@@ -238,8 +269,33 @@ impl SudokatScene {
         } else if cells.iter().all(|&v| v != 0) {
             self.character.set_pose(PoseId::SittingSideAnnoyed);
         } else {
-            self.character.set_pose(PoseId::SittingSideNeutral);
+            self.character.set_pose(self.idle_pose);
         }
+    }
+
+    /// On each timer roll, maybe drift to a different idle pose.
+    fn tick_pose(&mut self, ctx: &mut GameContext, dt: f32) {
+        if self.state != State::Playing {
+            return;
+        }
+        self.pose_timer += dt;
+        if self.pose_timer < self.pose_change_in {
+            return;
+        }
+        self.pose_timer = 0.0;
+        self.pose_change_in = rand_range_f32(&mut ctx.rng, POSE_MIN_SECS, POSE_MAX_SECS);
+        if !rand_bool(&mut ctx.rng, 0.5) {
+            return;
+        }
+        // Skip over the current pose so a swap always shows something new.
+        let current = IDLE_POSES.iter().position(|&p| p == self.idle_pose);
+        let slots = IDLE_POSES.len() - current.is_some() as usize;
+        let mut i = rand_range_u32(&mut ctx.rng, 0, slots as u32 - 1) as usize;
+        if current.is_some_and(|c| i >= c) {
+            i += 1;
+        }
+        self.idle_pose = IDLE_POSES[i];
+        self.check_board();
     }
 
     fn move_cursor(&mut self, buttons: &mut Buttons) {
@@ -635,6 +691,8 @@ fn generate(difficulty: Difficulty, rng: &mut u32) -> Grid {
 impl Scene for SudokatScene {
     fn enter(&mut self, ctx: &mut GameContext) {
         self.session_points = 0;
+        self.pose_timer = 0.0;
+        self.pose_change_in = rand_range_f32(&mut ctx.rng, POSE_MIN_SECS, POSE_MAX_SECS);
         self.difficulty = Difficulty::from_u8(ctx.sudokat_difficulty);
         self.givens = ctx.sudokat_givens;
         self.entries = ctx.sudokat_entries;
@@ -671,6 +729,7 @@ impl Scene for SudokatScene {
         }
 
         self.character.animate(dt);
+        self.tick_pose(ctx, dt);
 
         if self.menu_active {
             self.handle_menu(buttons, ctx);

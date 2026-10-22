@@ -1,6 +1,6 @@
 //! Purrimeter, a dots & boxes minigame. Take turns with the pet drawing lines
 //! between dots; closing a box scores it and earns another turn. The board
-//! grows from 5x5 to 7x7 boxes as the player wins.
+//! grows from 5x5 to 7x9 boxes as the player wins.
 //!
 //! Lines are drawn in two steps: pick a dot, then a direction to connect it.
 
@@ -22,14 +22,14 @@ use crate::{
 };
 
 const MAX_ROWS: usize = 7;
-const MAX_COLS: usize = 7;
+const MAX_COLS: usize = 9;
 const H_EDGES: usize = (MAX_ROWS + 1) * MAX_COLS;
 const V_EDGES: usize = MAX_ROWS * (MAX_COLS + 1);
 const EDGES: usize = H_EDGES + V_EDGES;
 
 // Board geometry: dots 8px apart, centred in the area left of the score panel.
 const PITCH: i32 = 8;
-const BOARD_AREA_W: i32 = 61;
+const BOARD_AREA_W: i32 = 75;
 const BOARD_AREA_H: i32 = 64;
 
 // Box owners.
@@ -55,7 +55,9 @@ fn level_params(level: u32) -> (usize, usize) {
         2 => (5, 6),
         3 => (6, 6),
         4 => (6, 7),
-        _ => (7, 7),
+        5 => (7, 7),
+        6 => (7, 8),
+        _ => (7, 9),
     }
 }
 
@@ -271,7 +273,7 @@ pub struct PurrimeterScene {
 impl PurrimeterScene {
     pub fn new() -> Self {
         let mut scene = Self {
-            character: Character::new(Point::new(100, 63)),
+            character: Character::new(Point::new(104, 63)),
             result_popup: Popup::new(14, 0, 100, 40),
 
             level: 1,
@@ -528,17 +530,8 @@ impl PurrimeterScene {
 
     fn draw_score(&self, r: &mut Renderer) {
         let mut buf: String<8> = String::new();
-        self.draw_column(r, &mut buf, 62, t!("You"), PLAYER, self.player_score);
-        self.draw_column(r, &mut buf, 92, t!("Pet"), PET, self.pet_score);
-
-        let mut level: String<24> = String::new();
-        let mut num: String<8> = String::new();
-        {
-            use core::fmt::Write as _;
-            let _ = write!(num, "{}", self.level);
-        }
-        crate::i18n::substitute(&mut level, t!("Level {n}"), &[("n", num.as_str())]);
-        r.draw_text_small(level.as_str(), Point::new(62, 34));
+        self.draw_column(r, &mut buf, 77, t!("You"), PLAYER, self.player_score);
+        self.draw_column(r, &mut buf, 101, t!("Pet"), PET, self.pet_score);
     }
 
     /// One side's panel: name, box marker with boxes this game, then rounds won.
@@ -567,7 +560,7 @@ impl PurrimeterScene {
                 self.result_popup.draw(r, false);
             }
             State::PetTurn => {
-                r.draw_text("...", Point::new(110, 1));
+                r.draw_text_small("...", Point::new(113, 32));
             }
             State::PlayerTurn => {}
         }
