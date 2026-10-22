@@ -378,12 +378,28 @@ mod driver {
     ) {
         let mut ad = [0u8; ble_proto::ADVERT_MAX];
         let n = sh.borrow().advert(&mut ad);
+        // Scan response: complete local name + 128-bit service UUID, so
+        // phone scanners can find the device by name or UUID.
+        let mut scan = [0u8; 31];
+        let mut name = crate::t!("BLE name");
+        while name.len() > 11 {
+            name = &name[..name.floor_char_boundary(name.len() - 1)];
+        }
+        let nb = name.as_bytes();
+        scan[0] = nb.len() as u8 + 1;
+        scan[1] = 0x09;
+        scan[2..2 + nb.len()].copy_from_slice(nb);
+        let u = 2 + nb.len();
+        scan[u] = 17;
+        scan[u + 1] = 0x07;
+        scan[u + 2..u + 18].copy_from_slice(&SERVICE_UUID);
+        let scan_len = u + 18;
         let Ok(advertiser) = peripheral
             .advertise(
                 &Default::default(),
                 Advertisement::ConnectableScannableUndirected {
                     adv_data: &ad[..n],
-                    scan_data: &[],
+                    scan_data: &scan[..scan_len],
                 },
             )
             .await
