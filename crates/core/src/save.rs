@@ -26,7 +26,7 @@ use crate::{
 
 /// Major schema version. Bumped when the on-disk shape changes in a
 /// backwards-incompatible way.
-const SCHEMA_VERSION: u8 = 0;
+const SCHEMA_VERSION: u8 = 1;
 
 /// Save interval used by `save_if_needed`. Deliberately longer than
 /// `location_tracker::SCAN_INTERVAL`: each scan is preceded by a save, so while
@@ -34,17 +34,17 @@ const SCHEMA_VERSION: u8 = 0;
 /// once per scan interval rather than twice.
 const SAVE_INTERVAL: Duration = Duration::from_secs(75 * 60);
 
-/// Max size of the JSON payload. Sized to `storage::MAX_PAYLOAD`, which
-/// covers a maxed-out save (80 plants, full inventory) with room to spare.
-const JSON_BUF_SIZE: usize = storage::MAX_PAYLOAD;
+/// Max size of the encoded payload (postcard). A maxed-out save (80 plants,
+/// full inventory) is well under this; must not exceed `storage::MAX_PAYLOAD`.
+const SAVE_BUF_SIZE: usize = 8192;
+const _: () = assert!(SAVE_BUF_SIZE <= storage::MAX_PAYLOAD);
 
-/// Working buffer for JSON encode/decode. `static mut` because the buffer is
-/// large enough that a stack allocation would dwarf typical task stacks.
-static mut JSON_BUF: [u8; JSON_BUF_SIZE] = [0u8; JSON_BUF_SIZE];
+/// Working buffer for encode/decode. `static mut` to keep it off the stack.
+static mut SAVE_BUF: [u8; SAVE_BUF_SIZE] = [0u8; SAVE_BUF_SIZE];
 
 // ---------------------------------------------------------------------------
-// Strings used in the JSON. Centralised here so the encoder and the tolerant
-// decoder agree.
+// Strings used in the save format. Centralised here so the encoder and the
+// tolerant decoder agree.
 // ---------------------------------------------------------------------------
 
 type SStr = String<24>;
@@ -356,6 +356,49 @@ struct ToyData {
     #[serde(default)] durability: u8,
 }
 
+/// Plant records live in this static so serde never builds the 12 KB list on the stack.
+static mut PLANTS: Vec<PlantRecord, MAX_PLANTS> = Vec::new();
+
+#[derive(Default)]
+struct PlantList;
+
+impl Serialize for PlantList {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        // SAFETY: single-threaded access.
+        let plants = unsafe { &*core::ptr::addr_of!(PLANTS) };
+        let mut seq = s.serialize_seq(Some(plants.len()))?;
+        for p in plants.iter() {
+            seq.serialize_element(p)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for PlantList {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = PlantList;
+            fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.write_str("plant list")
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<PlantList, A::Error> {
+                // SAFETY: single-threaded access.
+                let plants = unsafe { &mut *core::ptr::addr_of_mut!(PLANTS) };
+                plants.clear();
+                while let Some(r) = seq.next_element::<PlantRecord>()? {
+                    if plants.push(r).is_err() {
+                        return Err(serde::de::Error::custom("too many plants"));
+                    }
+                }
+                Ok(PlantList)
+            }
+        }
+        d.deserialize_seq(V)
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 struct PlantRecord {
     #[serde(default)] id: u32,
@@ -397,8 +440,8 @@ struct LocationEntryData {
     count: f32,
 }
 
-/// Placeholder for the friends map (not yet implemented). Serialises as an
-/// empty JSON object; deserialise is a no-op accept-anything.
+/// Placeholder for the friends map (not yet implemented). Occupies a single
+/// zero-length-map byte on the wire.
 #[derive(Default)]
 struct StubMap;
 impl Serialize for StubMap {
@@ -409,7 +452,18 @@ impl Serialize for StubMap {
 }
 impl<'de> Deserialize<'de> for StubMap {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        serde::de::IgnoredAny::deserialize(d).map(|_| StubMap)
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = StubMap;
+            fn expecting(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                f.write_str("an empty map")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut m: A) -> Result<StubMap, A::Error> {
+                while m.next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?.is_some() {}
+                Ok(StubMap)
+            }
+        }
+        d.deserialize_map(V)
     }
 }
 
@@ -426,7 +480,7 @@ struct SaveData {
     #[serde(default)] medicine: u8,
     #[serde(default)] sickness: f32,
     #[serde(default)] medicine_pending: bool,
-    #[serde(default)] plants: Vec<PlantRecord, MAX_PLANTS>,
+    #[serde(default)] plants: PlantList,
     #[serde(default)] next_plant_id: u32,
     #[serde(default)] pet_seed: u64,
     #[serde(default)] pet_gender: Option<SStr>,
@@ -483,6 +537,7 @@ struct SaveData {
 // Bridging GameContext ↔ SaveData.
 // ---------------------------------------------------------------------------
 
+#[inline(never)]
 fn build(ctx: &GameContext) -> SaveData {
     let mut toys: Vec<ToyData, TOY_VARIANT_COUNT> = Vec::new();
     for t in ctx.toys.iter() {
@@ -492,7 +547,9 @@ fn build(ctx: &GameContext) -> SaveData {
         });
     }
 
-    let mut plants: Vec<PlantRecord, MAX_PLANTS> = Vec::new();
+    // SAFETY: single-threaded access.
+    let plants = unsafe { &mut *core::ptr::addr_of_mut!(PLANTS) };
+    plants.clear();
     for p in ctx.plants.iter() {
         let _ = plants.push(PlantRecord {
             id: p.id,
@@ -589,7 +646,7 @@ fn build(ctx: &GameContext) -> SaveData {
         medicine: ctx.medicine,
         sickness: ctx.sickness,
         medicine_pending: ctx.medicine_pending,
-        plants,
+        plants: PlantList,
         next_plant_id: ctx.next_plant_id,
         pet_seed: ctx.pet_seed,
         pet_gender: ctx.pet_gender.map(|g| sstr(gender_save_key(g))),
@@ -653,6 +710,7 @@ fn build(ctx: &GameContext) -> SaveData {
     }
 }
 
+#[inline(never)]
 fn apply(data: &SaveData, ctx: &mut GameContext) {
     // Stats
     ctx.fullness = data.fullness;
@@ -775,9 +833,11 @@ fn apply(data: &SaveData, ctx: &mut GameContext) {
 
     // Plants: only overwrite when the save actually contains plant entries.
     // The starter set stays otherwise.
-    if !data.plants.is_empty() {
+    // SAFETY: single-threaded access.
+    let saved_plants = unsafe { &*core::ptr::addr_of!(PLANTS) };
+    if !saved_plants.is_empty() {
         ctx.plants.clear();
-        for r in data.plants.iter() {
+        for r in saved_plants.iter() {
             let plant = Plant {
                 id: r.id,
                 seed: seed_from_key(&r.seed_type),
@@ -892,6 +952,7 @@ fn parse_sudokat_cells(s: &str) -> Option<[u8; 81]> {
 }
 
 /// Restore the Sudokat board, dropping it if anything is malformed.
+#[inline(never)]
 fn apply_sudokat(data: &SaveData, ctx: &mut GameContext) {
     ctx.sudokat_difficulty = data.sudokat_difficulty.min(2);
     ctx.sudokat_givens = [0; 81];
@@ -924,19 +985,45 @@ pub fn has_save() -> bool {
 }
 
 /// Load the most recent save into `ctx`. Returns true on success.
+/// Single off-stack home for SaveData; its by-value temporaries stay confined to the
+/// `#[inline(never)]` helpers below so they are released before `apply`/encode run.
+static mut SAVE_SLOT: Option<SaveData> = None;
+
+#[inline(never)]
+fn decode_into_slot(bytes: &[u8]) -> Result<(), postcard::Error> {
+    let data = postcard::from_bytes::<SaveData>(bytes)?;
+    // SAFETY: single-threaded access.
+    unsafe { *core::ptr::addr_of_mut!(SAVE_SLOT) = Some(data) };
+    Ok(())
+}
+
+#[inline(never)]
+fn build_into_slot(ctx: &GameContext) {
+    let data = build(ctx);
+    // SAFETY: single-threaded access.
+    unsafe { *core::ptr::addr_of_mut!(SAVE_SLOT) = Some(data) };
+}
+
+#[inline(never)]
 pub fn load(ctx: &mut GameContext) -> bool {
-    // SAFETY: single-threaded boot path; JSON_BUF is only touched here and in
-    // `save` below, never concurrently.
-    let buf = unsafe { &mut *core::ptr::addr_of_mut!(JSON_BUF) };
+    // SAFETY: single-threaded; SAVE_BUF is only touched here and in `save`.
+    let buf = unsafe { &mut *core::ptr::addr_of_mut!(SAVE_BUF) };
     let Some(len) = storage::read_latest(buf) else {
         println!("[Save] storage::read_latest returned None, no save loaded");
         return false;
     };
-    match serde_json_core::from_slice::<SaveData>(&buf[..len]) {
-        Ok((data, consumed)) => {
-            apply(&data, ctx);
+    // The leading byte is `SaveData::v`; this also rejects legacy JSON saves.
+    if len == 0 || buf[0] != SCHEMA_VERSION {
+        println!("[Save] Unsupported save format, ignoring");
+        return false;
+    }
+    match decode_into_slot(&buf[..len]) {
+        Ok(()) => {
+            // SAFETY: decode_into_slot just filled the slot.
+            let data = unsafe { (*core::ptr::addr_of!(SAVE_SLOT)).as_ref().unwrap() };
+            apply(data, ctx);
             ctx.last_save_time = Some(Instant::now());
-            println!("[Save] Loaded {} bytes ({} parsed)", len, consumed);
+            println!("[Save] Loaded {} bytes", len);
             true
         }
         Err(e) => {
@@ -946,13 +1033,16 @@ pub fn load(ctx: &mut GameContext) -> bool {
     }
 }
 
-/// Encode `ctx` to JSON and persist it. Returns true on success.
+/// Encode `ctx` and persist it. Returns true on success.
+#[inline(never)]
 pub fn save(ctx: &mut GameContext) -> bool {
-    let data = build(ctx);
+    build_into_slot(ctx);
+    // SAFETY: just filled.
+    let data = unsafe { (*core::ptr::addr_of!(SAVE_SLOT)).as_ref().unwrap() };
     // SAFETY: see `load`.
-    let buf = unsafe { &mut *core::ptr::addr_of_mut!(JSON_BUF) };
-    let len = match serde_json_core::to_slice(&data, buf) {
-        Ok(n) => n,
+    let buf = unsafe { &mut *core::ptr::addr_of_mut!(SAVE_BUF) };
+    let len = match postcard::to_slice(data, buf) {
+        Ok(used) => used.len(),
         Err(_) => {
             println!("[Save] Encode failed");
             return false;
