@@ -9,6 +9,10 @@
 
 pub const DISPLAY_WIDTH: u16 = 128;
 pub const DISPLAY_HEIGHT: u16 = 64;
+// The H2 board relies on weak internal pull-ups, so keep the bus slower.
+#[cfg(feature = "h2")]
+pub const I2C_FREQ_KHZ: u32 = 100;
+#[cfg(not(feature = "h2"))]
 pub const I2C_FREQ_KHZ: u32 = 400;
 
 #[cfg(not(feature = "desktop"))]

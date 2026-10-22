@@ -19,6 +19,12 @@ fn main() -> ! {
     // the esp-rs maintainers recommend for scan-only wifi; it holds the
     // driver's permanent buffers plus transient per-scan AP lists with
     // comfortable headroom. Nothing else in this firmware allocates.
+    // The H2 has less RAM than the C3/C6, and the game state (a ~16 KB scene
+    // moved by value during startup) needs a ~90 KB stack. With a 64 KB heap
+    // the stack was ~64 KB and overflowed silently, so use a smaller heap.
+    #[cfg(feature = "h2")]
+    esp_alloc::heap_allocator!(size: 40 * 1024);
+    #[cfg(not(feature = "h2"))]
     esp_alloc::heap_allocator!(size: 64 * 1024);
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
