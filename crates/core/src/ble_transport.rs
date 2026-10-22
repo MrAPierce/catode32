@@ -297,6 +297,24 @@ mod driver {
         }
     }
 
+    /// The GAP service build uses write-once statics inside trouble-host, so
+    /// the server can only be constructed once per boot; later sessions reuse it.
+    fn gatt_server() -> Option<&'static Server<'static>> {
+        static mut SERVER: Option<Server<'static>> = None;
+        // SAFETY: only the single game-loop thread builds or reads the server.
+        unsafe {
+            let slot = &mut *core::ptr::addr_of_mut!(SERVER);
+            if slot.is_none() {
+                *slot = Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
+                    name: "catode32",
+                    appearance: &appearance::power_device::GENERIC_POWER_DEVICE,
+                }))
+                .ok();
+            }
+            slot.as_ref()
+        }
+    }
+
     async fn drive(controller: Ctrl, sh: Rc<RefCell<Shared>>) {
         let own = sh.borrow().own;
         let address = Address::random(ble_proto::address_for(own));
@@ -307,15 +325,9 @@ mod driver {
         let mut runner = stack.runner();
         let mut peripheral = stack.peripheral();
         let mut central = stack.central();
-        let server = match Server::new_with_config(GapConfig::Peripheral(PeripheralConfig {
-            name: "catode32",
-            appearance: &appearance::power_device::GENERIC_POWER_DEVICE,
-        })) {
-            Ok(s) => s,
-            Err(_) => {
-                println!("[BLE] gatt server init failed");
-                return;
-            }
+        let Some(server) = gatt_server() else {
+            println!("[BLE] gatt server init failed");
+            return;
         };
         let handler = Handler(&sh);
 

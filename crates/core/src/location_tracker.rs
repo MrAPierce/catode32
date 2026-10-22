@@ -192,7 +192,18 @@ pub fn scan_now(ctx: &mut GameContext) -> Option<Vec<ScanBeacon, 32>> {
         };
         let work = async {
             let _session = scanner.scan(&config).await.ok()?;
-            embassy_time::Timer::after_millis(BLE_SCAN_MS).await;
+            // block_on's waker isn't an embassy-executor waker, so
+            // embassy_time::Timer would panic. Poll the clock instead.
+            let end = embassy_time::Instant::now() + embassy_time::Duration::from_millis(BLE_SCAN_MS);
+            core::future::poll_fn(|cx| {
+                if embassy_time::Instant::now() >= end {
+                    core::task::Poll::Ready(())
+                } else {
+                    cx.waker().wake_by_ref();
+                    core::task::Poll::Pending
+                }
+            })
+            .await;
             Some(())
         };
         let done = block_on(select(runner.run_with_handler(&collector), work));
