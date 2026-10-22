@@ -22,8 +22,9 @@ fn main() -> ! {
     // The H2 has less RAM than the C3/C6, and the game state (a ~16 KB scene
     // moved by value during startup) needs a ~90 KB stack. With a 64 KB heap
     // the stack was ~64 KB and overflowed silently, so use a smaller heap.
+    catode32_core::platform::stackmark::paint();
     #[cfg(feature = "h2")]
-    esp_alloc::heap_allocator!(size: 40 * 1024);
+    esp_alloc::heap_allocator!(size: 56 * 1024);
     #[cfg(not(feature = "h2"))]
     esp_alloc::heap_allocator!(size: 64 * 1024);
 
@@ -49,7 +50,11 @@ fn main() -> ! {
     // `radio::acquire` and dropped again on the last release. The
     // peripheral and an empty peer manager are stashed on the game
     // context so the first acquire can do the actual `wifi::new`.
-    Game::new(
+    static mut GAME: core::mem::MaybeUninit<Game> = core::mem::MaybeUninit::uninit();
+    // SAFETY: `main` runs once; GAME is only ever touched here.
+    let slot = unsafe { &mut *core::ptr::addr_of_mut!(GAME) };
+    Game::init(
+        slot,
         renderer,
         board.buttons,
         board.rng,

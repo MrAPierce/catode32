@@ -170,6 +170,7 @@ pub struct SceneManager {
 }
 
 impl SceneManager {
+    #[inline(never)]
     pub fn new(ctx: &mut GameContext, start: SceneId) -> Self {
         let mut current = ActiveScene::from_id(start);
         current.as_scene_mut().enter(ctx);

@@ -73,6 +73,24 @@ impl Game {
         radio_peripheral: WIFI<'static>,
         peers: PeerManager,
     ) -> Self {
+        let mut slot = core::mem::MaybeUninit::<Game>::uninit();
+        Self::init(&mut slot, renderer, buttons, rng, led, radio_peripheral, peers);
+        // SAFETY: `init` fully initialised the slot.
+        unsafe { slot.assume_init() }
+    }
+
+    /// Build the game directly inside `slot` so firmware can keep the 23 KB
+    /// struct in static memory instead of copying it through stack frames.
+    #[inline(never)]
+    pub fn init<'a>(
+        slot: &'a mut core::mem::MaybeUninit<Game>,
+        renderer: Renderer,
+        buttons: Buttons,
+        rng: Rng,
+        led: Led,
+        radio_peripheral: WIFI<'static>,
+        peers: PeerManager,
+    ) -> &'a mut Game {
         let mut context = GameContext::new(led);
         // Seed the behavior RNG from the hardware peripheral so each boot's
         // behavior choices differ until/unless a save provides a seed.
@@ -146,23 +164,26 @@ impl Game {
         };
         context.scan_started = false;
 
-        let scene_manager = SceneManager::new(&mut context, start);
-        Self {
-            renderer,
-            buttons,
-            context,
-            scene_manager,
-            time_system,
-            sleep_manager: SleepManager::new(),
-            transition: TransitionManager::new(),
-            pending_scene: None,
-            sleep_pending: false,
-            deep_sleep_pending: false,
-            just_woke: false,
-            last_dt_ms: 0,
-            location_next_scan,
-            last_frame: None,
-            resumed_intent: resumed,
+        let p = slot.as_mut_ptr();
+        // SAFETY: every field of Game is written exactly once before `assume_init_mut`.
+        unsafe {
+            let scene_manager = core::ptr::addr_of_mut!((*p).scene_manager);
+            scene_manager.write(SceneManager::new(&mut context, start));
+            core::ptr::addr_of_mut!((*p).renderer).write(renderer);
+            core::ptr::addr_of_mut!((*p).buttons).write(buttons);
+            core::ptr::addr_of_mut!((*p).context).write(context);
+            core::ptr::addr_of_mut!((*p).time_system).write(time_system);
+            core::ptr::addr_of_mut!((*p).sleep_manager).write(SleepManager::new());
+            core::ptr::addr_of_mut!((*p).transition).write(TransitionManager::new());
+            core::ptr::addr_of_mut!((*p).pending_scene).write(None);
+            core::ptr::addr_of_mut!((*p).sleep_pending).write(false);
+            core::ptr::addr_of_mut!((*p).deep_sleep_pending).write(false);
+            core::ptr::addr_of_mut!((*p).just_woke).write(false);
+            core::ptr::addr_of_mut!((*p).last_dt_ms).write(0);
+            core::ptr::addr_of_mut!((*p).location_next_scan).write(location_next_scan);
+            core::ptr::addr_of_mut!((*p).last_frame).write(None);
+            core::ptr::addr_of_mut!((*p).resumed_intent).write(resumed);
+            slot.assume_init_mut()
         }
     }
 
@@ -256,6 +277,7 @@ impl Game {
     }
 
     pub fn run(&mut self) -> ! {
+        crate::platform::stackmark::report("run entry");
         loop {
             let frame_start = Instant::now();
             watchdog::feed();

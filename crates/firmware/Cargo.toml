@@ -36,6 +36,7 @@ h2 = [
 
 # Language selection — pass-through to core. Exactly one should be active.
 lang-en = ["catode32-core/lang-en"]
+stackmark = ["catode32-core/stackmark"]
 lang-de = ["catode32-core/lang-de"]
 lang-es = ["catode32-core/lang-es"]
 lang-fr = ["catode32-core/lang-fr"]
