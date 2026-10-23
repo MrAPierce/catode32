@@ -54,4 +54,11 @@ pub trait Transport {
     fn send_to(&mut self, peer: PeerId, data: &[u8]);
     fn poll(&mut self);
     fn drain(&mut self) -> Vec<InboxItem, INBOX_CAPACITY>;
+
+    /// Numeric-comparison code awaiting the player's yes/no, if any (BLE only).
+    fn pairing_code(&self) -> Option<u32> {
+        None
+    }
+    /// Answer the pending [`Transport::pairing_code`] prompt.
+    fn answer_pairing(&mut self, _accept: bool) {}
 }

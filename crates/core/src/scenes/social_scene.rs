@@ -52,6 +52,12 @@ use crate::{
 const HELLO_INTERVAL: f32 = 2.0;
 const NEARBY_TIMEOUT: f32 = 6.0;
 const INVITE_TIMEOUT: f32 = 10.0;
+/// How long the inviter waits for a reply. BLE links must pair first, which
+/// can take a while, so the inviter waits longer than the invitee's prompt.
+#[cfg(feature = "h2")]
+const INVITER_WAIT: f32 = 35.0;
+#[cfg(not(feature = "h2"))]
+const INVITER_WAIT: f32 = INVITE_TIMEOUT;
 
 const MAX_NEARBY: usize = 5;
 const LINE_HEIGHT: i32 = 8;
@@ -363,7 +369,7 @@ impl Scene for SocialScene {
             }
             State::Inviting { elapsed, .. } => {
                 *elapsed += dt;
-                let timed_out = *elapsed >= INVITE_TIMEOUT;
+                let timed_out = *elapsed >= INVITER_WAIT;
                 if timed_out || buttons.was_just_pressed(Button::B) {
                     self.state = State::Browsing;
                 }

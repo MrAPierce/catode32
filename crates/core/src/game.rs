@@ -16,6 +16,7 @@ use crate::{
     render::Renderer,
     save,
     scene::{SceneId, SceneManager},
+    ui::confirm::{Confirm, ConfirmResult},
     sleep_manager::SleepManager,
     time_system::TimeSystem,
     transition::{TransitionManager, TransitionStep},
@@ -62,6 +63,8 @@ pub struct Game {
     /// True when this boot resumed a scene from a crash-resume intent. The
     /// intent is cleared after the first completed tick.
     resumed_intent: bool,
+    /// Numeric-comparison pairing prompt (BLE only), drawn over any scene.
+    pair_confirm: Confirm,
 }
 
 impl Game {
@@ -188,6 +191,7 @@ impl Game {
             core::ptr::addr_of_mut!((*p).location_next_scan).write(location_next_scan);
             core::ptr::addr_of_mut!((*p).last_frame).write(None);
             core::ptr::addr_of_mut!((*p).resumed_intent).write(resumed);
+            core::ptr::addr_of_mut!((*p).pair_confirm).write(Confirm::new());
             slot.assume_init_mut()
         }
     }
@@ -219,6 +223,7 @@ impl Game {
         if let Some(peers) = self.context.peers.as_mut() {
             peers.poll();
         }
+        self.update_pairing_prompt();
 
         self.update(dt);
 
@@ -361,6 +366,35 @@ impl Game {
         }
     }
 
+    /// Show the pairing code from the transport and route A/B to it, hiding
+    /// input from the scenes while the prompt is up.
+    fn update_pairing_prompt(&mut self) {
+        let code = self.context.peers.as_ref().and_then(|p| p.pairing_code());
+        match code {
+            Some(c) if !self.pair_confirm.is_open() => {
+                use core::fmt::Write as _;
+                let mut text: heapless::String<32> = heapless::String::new();
+                let _ = write!(text, "Pair? {:06}", c);
+                self.pair_confirm.open(text.as_str());
+            }
+            None if self.pair_confirm.is_open() => self.pair_confirm.close(),
+            _ => {}
+        }
+        if self.pair_confirm.is_open() {
+            let accept = match self.pair_confirm.handle_input(&mut self.buttons) {
+                ConfirmResult::Confirmed => Some(true),
+                ConfirmResult::Cancelled => Some(false),
+                ConfirmResult::Pending => None,
+            };
+            if let Some(a) = accept {
+                if let Some(p) = self.context.peers.as_mut() {
+                    p.answer_pairing(a);
+                }
+            }
+            self.buttons.consume_all();
+        }
+    }
+
     /// Run a wifi scan if one is due. Called only from the transition
     /// midpoint so the ~1-3 s blocking scan is hidden behind a black screen.
     /// `location_next_scan = None` means "scan immediately" (a boot whose save
@@ -399,6 +433,7 @@ impl Game {
         self.scene_manager
             .draw(&self.context, &mut self.renderer, self.last_dt_ms);
         self.transition.draw(&mut self.renderer);
+        self.pair_confirm.draw(&mut self.renderer);
         self.renderer.flush();
     }
 

@@ -35,6 +35,9 @@ pub struct Shared {
     outbox: Vec<(u16, Frame), OUTBOX_MAX>,
     pub want: Option<u16>,
     pub link: Option<u16>,
+    /// Passkey shown to the player while a pairing confirm is pending.
+    pub pair_code: Option<u32>,
+    pub pair_answer: Option<bool>,
 }
 
 impl Shared {
@@ -49,6 +52,8 @@ impl Shared {
             outbox: Vec::new(),
             want: None,
             link: None,
+            pair_code: None,
+            pair_answer: None,
         }
     }
 
@@ -172,6 +177,8 @@ mod driver {
     const SCAN_MS: u64 = 1500;
     const CONNECT_TIMEOUT_MS: u64 = 6000;
     const LINK_IDLE_MS: u64 = 20_000;
+    /// Player's window to confirm the pairing code; kept under LINK_IDLE_MS.
+    const PAIR_TIMEOUT_MS: u64 = 15_000;
     const POLLS_PER_TICK: usize = 3;
     const FLUSH_MS: u64 = 300;
 
@@ -245,6 +252,8 @@ mod driver {
             s.clear_outbox();
             s.want = None;
             s.link = None;
+            s.pair_code = None;
+            s.pair_answer = None;
         }
 
         fn has_pending(&self) -> bool {
@@ -298,6 +307,36 @@ mod driver {
         fn drain(&mut self) -> Vec<InboxItem, INBOX_CAPACITY> {
             self.sh.borrow_mut().drain()
         }
+        fn pairing_code(&self) -> Option<u32> {
+            self.sh.borrow().pair_code
+        }
+        fn answer_pairing(&mut self, accept: bool) {
+            self.sh.borrow_mut().pair_answer = Some(accept);
+        }
+    }
+
+    /// Show `code` to the player and wait for their yes/no. Times out as a
+    /// rejection so an unattended cat never stays half-paired.
+    async fn await_pair_decision(sh: &RefCell<Shared>, code: u32) -> bool {
+        {
+            let mut s = sh.borrow_mut();
+            s.pair_code = Some(code);
+            s.pair_answer = None;
+        }
+        let start = Instant::now();
+        let accept = loop {
+            if let Some(a) = sh.borrow().pair_answer {
+                break a;
+            }
+            if start.elapsed() >= Duration::from_millis(PAIR_TIMEOUT_MS) {
+                break false;
+            }
+            Timer::after_millis(50).await;
+        };
+        let mut s = sh.borrow_mut();
+        s.pair_code = None;
+        s.pair_answer = None;
+        accept
     }
 
     /// The GAP service build uses write-once statics inside trouble-host, so
@@ -440,10 +479,13 @@ mod driver {
             loop {
                 match conn.next().await {
                     GattConnectionEvent::Disconnected { .. } => break,
-                    // Phase 0 spike: auto-confirm and log the number.
                     GattConnectionEvent::PassKeyConfirm(k) => {
                         println!("[BLE] peripheral passkey {}", k.value());
-                        let _ = conn.pass_key_confirm();
+                        if await_pair_decision(sh, k.value()).await {
+                            let _ = conn.pass_key_confirm();
+                        } else {
+                            let _ = conn.pass_key_cancel();
+                        }
                     }
                     GattConnectionEvent::PairingComplete { security_level, bond } => {
                         println!("[BLE] peripheral paired {:?} bond={}", security_level, bond.is_some());
@@ -508,6 +550,16 @@ mod driver {
         sh.borrow_mut().link = Some(target);
 
         let session = async {
+            // Hold GATT traffic until pairing finishes; the player may still be
+            // reading the code.
+            let wait_start = Instant::now();
+            while !matches!(conn.security_level(), Ok(SecurityLevel::EncryptedAuthenticated)) {
+                if wait_start.elapsed() >= Duration::from_millis(PAIR_TIMEOUT_MS + 3_000) || !conn.is_connected() {
+                    println!("[BLE] central not secured, giving up");
+                    return;
+                }
+                Timer::after_millis(50).await;
+            }
             let Ok(services) = client.services_by_uuid(&Uuid::new_long(SERVICE_UUID)).await else {
                 return;
             };
@@ -560,7 +612,11 @@ mod driver {
                     ConnectionEvent::Disconnected { .. } => break,
                     ConnectionEvent::PassKeyConfirm(k) => {
                         println!("[BLE] central passkey {}", k.value());
-                        let _ = conn.pass_key_confirm();
+                        if await_pair_decision(sh, k.value()).await {
+                            let _ = conn.pass_key_confirm();
+                        } else {
+                            let _ = conn.pass_key_cancel();
+                        }
                     }
                     ConnectionEvent::PairingComplete { security_level, bond } => {
                         println!("[BLE] central paired {:?} bond={}", security_level, bond.is_some());
