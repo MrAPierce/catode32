@@ -94,7 +94,7 @@ embassy-futures = { version = "0.1", optional = true }
 bt-hci = { version = "0.9", optional = true }
 embassy-time = { version = "0.5.1", features = ["generic-queue-8"], optional = true }
 static_cell = { version = "2", optional = true }
-trouble-host = { version = "0.7", default-features = false, features = ["central", "peripheral", "gatt", "derive", "scan", "default-packet-pool-mtu-27", "default-packet-pool-size-4"], optional = true }
+trouble-host = { version = "0.7", default-features = false, features = ["central", "peripheral", "gatt", "derive", "scan", "security", "default-packet-pool-mtu-128", "default-packet-pool-size-4"], optional = true }
 
 ssd1306 = "0.10.0"
 embedded-graphics = "0.8.2"

@@ -324,6 +324,7 @@ mod driver {
         let mut resources: HostResources<Ctrl, DefaultPacketPool, 1, 3> = HostResources::new();
         let stack = trouble_host::new(controller, &mut resources)
             .set_random_address(address)
+            .set_io_capabilities(IoCapabilities::DisplayYesNo)
             .build();
         let mut runner = stack.runner();
         let mut peripheral = stack.peripheral();
@@ -434,10 +435,20 @@ mod driver {
         peer: u16,
     ) {
         let rx = server.svc.rx.handle;
+        let _ = conn.raw().set_bondable(true);
         let events = async {
             loop {
                 match conn.next().await {
                     GattConnectionEvent::Disconnected { .. } => break,
+                    // Phase 0 spike: auto-confirm and log the number.
+                    GattConnectionEvent::PassKeyConfirm(k) => {
+                        println!("[BLE] peripheral passkey {}", k.value());
+                        let _ = conn.pass_key_confirm();
+                    }
+                    GattConnectionEvent::PairingComplete { security_level, bond } => {
+                        println!("[BLE] peripheral paired {:?} bond={}", security_level, bond.is_some());
+                    }
+                    GattConnectionEvent::PairingFailed(e) => println!("[BLE] peripheral pairing failed {:?}", e),
                     GattConnectionEvent::Gatt { event } => {
                         if let GattEvent::Write(w) = &event {
                             if w.handle() == rx {
@@ -541,6 +552,24 @@ mod driver {
                 }
             }
         };
-        let _ = select(client.task(), session).await;
+        let _ = conn.set_bondable(true);
+        let _ = conn.request_security();
+        let events = async {
+            loop {
+                match conn.next().await {
+                    ConnectionEvent::Disconnected { .. } => break,
+                    ConnectionEvent::PassKeyConfirm(k) => {
+                        println!("[BLE] central passkey {}", k.value());
+                        let _ = conn.pass_key_confirm();
+                    }
+                    ConnectionEvent::PairingComplete { security_level, bond } => {
+                        println!("[BLE] central paired {:?} bond={}", security_level, bond.is_some());
+                    }
+                    ConnectionEvent::PairingFailed(e) => println!("[BLE] central pairing failed {:?}", e),
+                    _ => {}
+                }
+            }
+        };
+        let _ = select(select(client.task(), session), events).await;
     }
 }
