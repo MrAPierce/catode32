@@ -442,6 +442,31 @@ mod driver {
         println!("[BLE] bond persisted ok={} total={}", ok, n);
     }
 
+    /// Fail-fast GATT client creations in a row (see `central_visit`).
+    static CLIENT_FAILS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+    /// Drop a peer's bond from flash after the peer reports it lost its own.
+    /// A fresh pairing re-adds it via `persist_bond`.
+    fn forget_bond(addr: &Address) {
+        let mut list = load_bonds();
+        let before = list.len();
+        list.retain(|b| b.identity.addr != *addr);
+        if list.len() == before {
+            return;
+        }
+        let mut buf = [0u8; 1 + BOND_LEN * MAX_BONDS];
+        let mut n = 0;
+        for b in list.iter() {
+            let s = 1 + n * BOND_LEN;
+            if encode_bond(b, &mut buf[s..s + BOND_LEN]) {
+                n += 1;
+            }
+        }
+        buf[0] = n as u8;
+        let ok = crate::storage::write_bonds(&buf[..1 + n * BOND_LEN]);
+        println!("[BLE] bond forgotten ok={} total={}", ok, n);
+    }
+
     async fn drive(controller: Ctrl, sh: Rc<RefCell<Shared>>) {
         let own = sh.borrow().own;
         let address = Address::random(ble_proto::address_for(own));
@@ -582,6 +607,10 @@ mod driver {
                         }
                     }
                     GattConnectionEvent::PairingFailed(e) => println!("[BLE] peripheral pairing failed {:?}", e),
+                    GattConnectionEvent::BondLost => {
+                        println!("[BLE] peripheral: peer lost bond");
+                        forget_bond(&conn.raw().peer_identity().addr);
+                    }
                     GattConnectionEvent::Gatt { event } => {
                         let secure = matches!(
                             conn.raw().security_level(),
@@ -650,8 +679,17 @@ mod driver {
         };
         let Ok(client) = GattClient::<Ctrl, DefaultPacketPool, 10>::new(stack, &conn).await else {
             println!("[BLE] gatt client failed");
+            // A peer that dropped its bond rejects our stored key and hangs up
+            // before any event reaches us; clear the stale bond after repeats.
+            if CLIENT_FAILS.fetch_add(1, core::sync::atomic::Ordering::Relaxed) >= 1 {
+                CLIENT_FAILS.store(0, core::sync::atomic::Ordering::Relaxed);
+                let id = conn.peer_identity();
+                let _ = stack.remove_bond_information(id);
+                forget_bond(&id.addr);
+            }
             return;
         };
+        CLIENT_FAILS.store(0, core::sync::atomic::Ordering::Relaxed);
         println!("[BLE] connected to {:04x}", target);
         sh.borrow_mut().link = Some(target);
 
@@ -731,6 +769,10 @@ mod driver {
                         }
                     }
                     ConnectionEvent::PairingFailed(e) => println!("[BLE] central pairing failed {:?}", e),
+                    ConnectionEvent::BondLost => {
+                        println!("[BLE] central: peer lost bond");
+                        forget_bond(&conn.peer_identity().addr);
+                    }
                     _ => {}
                 }
             }
