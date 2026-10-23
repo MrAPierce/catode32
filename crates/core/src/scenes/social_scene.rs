@@ -101,6 +101,9 @@ pub struct SocialScene {
     nearby: Vec<NearbyEntry, MAX_NEARBY>,
     selected: usize,
     hello_timer: f32,
+    /// Seconds left in which a recent pairing prompt suggests a peer is
+    /// connecting, so the empty list reads "Waiting..." not "No cats nearby".
+    connecting: f32,
     /// Shared yes/no dialog used both for incoming `vreq` invites
     /// (Invited state) and the leave-visit prompt (Visiting state).
     confirm: Confirm,
@@ -113,6 +116,7 @@ impl SocialScene {
             nearby: Vec::new(),
             selected: 0,
             hello_timer: 0.0,
+            connecting: 0.0,
             confirm: Confirm::new(),
         }
     }
@@ -276,7 +280,12 @@ impl SocialScene {
         renderer.draw_text(t!("Social"), Point::new(0, 0));
 
         if self.nearby.is_empty() {
-            renderer.draw_text(t!("No cats nearby..."), Point::new(0, 18));
+            let msg = if self.connecting > 0.0 {
+                t!("Waiting...")
+            } else {
+                t!("No cats nearby...")
+            };
+            renderer.draw_text(msg, Point::new(0, 18));
         } else {
             for (i, entry) in self.nearby.iter().take(LINES_VISIBLE).enumerate() {
                 let mut row: String<24> = String::new();
@@ -302,6 +311,7 @@ impl Scene for SocialScene {
         self.nearby.clear();
         self.selected = 0;
         self.hello_timer = 0.0;
+        self.connecting = 0.0;
         peer_manager::start_session(ctx);
         // If we arrived while a visit is already in progress (the
         // user re-opened the menu mid-playdate), jump straight to
@@ -341,6 +351,11 @@ impl Scene for SocialScene {
 
         self.drain_and_dispatch(ctx);
         self.prune_nearby(dt);
+        if ctx.peers.as_ref().is_some_and(|p| p.pairing_code().is_some()) {
+            self.connecting = 20.0;
+        } else if self.connecting > 0.0 {
+            self.connecting -= dt;
+        }
 
         match &mut self.state {
             State::Browsing => {
