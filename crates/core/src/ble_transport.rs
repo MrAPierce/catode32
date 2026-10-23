@@ -357,6 +357,91 @@ mod driver {
         }
     }
 
+    const BOND_LEN: usize = 40;
+    const MAX_BONDS: usize = 6;
+
+    fn encode_bond(b: &BondInformation, out: &mut [u8]) -> bool {
+        if b.identity.addr.kind != AddrKind::RANDOM || !b.is_bonded {
+            return false;
+        }
+        let level = match b.security_level {
+            SecurityLevel::EncryptedAuthenticated => 2,
+            SecurityLevel::Encrypted => 1,
+            _ => return false,
+        };
+        out[..6].copy_from_slice(b.identity.addr.addr.raw());
+        out[6..22].copy_from_slice(&b.ltk.0.to_le_bytes());
+        let irk = b.identity.irk.map_or(0, |k| k.0.get());
+        out[22..38].copy_from_slice(&irk.to_le_bytes());
+        out[38] = level;
+        out[39] = 1;
+        true
+    }
+
+    fn decode_bond(r: &[u8]) -> Option<BondInformation> {
+        let addr: [u8; 6] = r[..6].try_into().ok()?;
+        let ltk = u128::from_le_bytes(r[6..22].try_into().ok()?);
+        let irk = u128::from_le_bytes(r[22..38].try_into().ok()?);
+        let level = match r[38] {
+            2 => SecurityLevel::EncryptedAuthenticated,
+            1 => SecurityLevel::Encrypted,
+            _ => return None,
+        };
+        let identity = Identity {
+            addr: Address::random(addr),
+            irk: IdentityResolvingKey::new(irk),
+        };
+        Some(BondInformation::new(identity, LongTermKey(ltk), level, r[39] != 0))
+    }
+
+    /// Bonds persisted in flash: `[count][BOND_LEN * count]`.
+    fn load_bonds() -> Vec<BondInformation, MAX_BONDS> {
+        let mut out = Vec::new();
+        let mut buf = [0u8; 1 + BOND_LEN * MAX_BONDS];
+        let Some(n) = crate::storage::read_bonds(&mut buf) else {
+            return out;
+        };
+        if n == 0 {
+            return out;
+        }
+        let count = (buf[0] as usize).min(MAX_BONDS);
+        for i in 0..count {
+            let s = 1 + i * BOND_LEN;
+            if s + BOND_LEN > n {
+                break;
+            }
+            if let Some(b) = decode_bond(&buf[s..s + BOND_LEN]) {
+                let _ = out.push(b);
+            }
+        }
+        out
+    }
+
+    /// Add (or replace) a bond in flash, evicting the oldest past the cap.
+    fn persist_bond(bond: &BondInformation) {
+        let mut rec = [0u8; BOND_LEN];
+        if !encode_bond(bond, &mut rec) {
+            return;
+        }
+        let mut list = load_bonds();
+        list.retain(|b| b.identity.addr != bond.identity.addr);
+        if list.is_full() {
+            list.remove(0);
+        }
+        let _ = list.push(bond.clone());
+        let mut buf = [0u8; 1 + BOND_LEN * MAX_BONDS];
+        let mut n = 0;
+        for b in list.iter() {
+            let s = 1 + n * BOND_LEN;
+            if encode_bond(b, &mut buf[s..s + BOND_LEN]) {
+                n += 1;
+            }
+        }
+        buf[0] = n as u8;
+        let ok = crate::storage::write_bonds(&buf[..1 + n * BOND_LEN]);
+        println!("[BLE] bond persisted ok={} total={}", ok, n);
+    }
+
     async fn drive(controller: Ctrl, sh: Rc<RefCell<Shared>>) {
         let own = sh.borrow().own;
         let address = Address::random(ble_proto::address_for(own));
@@ -365,6 +450,9 @@ mod driver {
             .set_random_address(address)
             .set_io_capabilities(IoCapabilities::DisplayYesNo)
             .build();
+        for b in load_bonds() {
+            let _ = stack.add_bond_information(b);
+        }
         let mut runner = stack.runner();
         let mut peripheral = stack.peripheral();
         let mut central = stack.central();
@@ -489,6 +577,9 @@ mod driver {
                     }
                     GattConnectionEvent::PairingComplete { security_level, bond } => {
                         println!("[BLE] peripheral paired {:?} bond={}", security_level, bond.is_some());
+                        if let Some(b) = &bond {
+                            persist_bond(b);
+                        }
                     }
                     GattConnectionEvent::PairingFailed(e) => println!("[BLE] peripheral pairing failed {:?}", e),
                     GattConnectionEvent::Gatt { event } => {
@@ -620,6 +711,9 @@ mod driver {
                     }
                     ConnectionEvent::PairingComplete { security_level, bond } => {
                         println!("[BLE] central paired {:?} bond={}", security_level, bond.is_some());
+                        if let Some(b) = &bond {
+                            persist_bond(b);
+                        }
                     }
                     ConnectionEvent::PairingFailed(e) => println!("[BLE] central pairing failed {:?}", e),
                     _ => {}
