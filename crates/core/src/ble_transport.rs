@@ -583,6 +583,17 @@ mod driver {
                     }
                     GattConnectionEvent::PairingFailed(e) => println!("[BLE] peripheral pairing failed {:?}", e),
                     GattConnectionEvent::Gatt { event } => {
+                        let secure = matches!(
+                            conn.raw().security_level(),
+                            Ok(SecurityLevel::EncryptedAuthenticated)
+                        );
+                        if !secure {
+                            println!("[BLE] peripheral rejected unsecured GATT access");
+                            if let Ok(reply) = event.reject(AttErrorCode::INSUFFICIENT_AUTHENTICATION) {
+                                reply.send().await;
+                            }
+                            continue;
+                        }
                         if let GattEvent::Write(w) = &event {
                             if w.handle() == rx {
                                 w.with_data(|_, d| sh.borrow_mut().push_inbox(peer, d));
@@ -598,6 +609,10 @@ mod driver {
         };
         let sender = async {
             loop {
+                if !matches!(conn.raw().security_level(), Ok(SecurityLevel::EncryptedAuthenticated)) {
+                    Timer::after_millis(50).await;
+                    continue;
+                }
                 let next = sh.borrow_mut().take_outbox(peer);
                 match next {
                     Some(f) => {
