@@ -104,6 +104,8 @@ pub struct SocialScene {
     /// Seconds left in which a recent pairing prompt suggests a peer is
     /// connecting, so the empty list reads "Waiting..." not "No cats nearby".
     connecting: f32,
+    /// Seconds since the pairing prompt closed while still inviting.
+    pair_idle: Option<f32>,
     /// Shared yes/no dialog used both for incoming `vreq` invites
     /// (Invited state) and the leave-visit prompt (Visiting state).
     confirm: Confirm,
@@ -117,6 +119,7 @@ impl SocialScene {
             selected: 0,
             hello_timer: 0.0,
             connecting: 0.0,
+            pair_idle: None,
             confirm: Confirm::new(),
         }
     }
@@ -352,9 +355,24 @@ impl Scene for SocialScene {
         self.drain_and_dispatch(ctx);
         self.prune_nearby(dt);
         if ctx.peers.as_ref().is_some_and(|p| p.pairing_code().is_some()) {
-            self.connecting = 20.0;
-        } else if self.connecting > 0.0 {
-            self.connecting -= dt;
+            self.connecting = 4.0;
+            self.pair_idle = Some(0.0);
+        } else {
+            if self.connecting > 0.0 {
+                self.connecting -= dt;
+            }
+            if let Some(t) = &mut self.pair_idle {
+                *t += dt;
+            }
+        }
+        // Pairing ended without a visit starting (declined or failed): the
+        // BLE link sends no "no" reply, so stop waiting on the invite.
+        if matches!(self.state, State::Inviting { .. }) && self.pair_idle.is_some_and(|t| t >= 6.0) {
+            self.pair_idle = None;
+            self.state = State::Browsing;
+        }
+        if !matches!(self.state, State::Inviting { .. }) {
+            self.pair_idle = None;
         }
 
         match &mut self.state {

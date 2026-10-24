@@ -493,6 +493,11 @@ mod driver {
                 if let Some(target) = want {
                     println!("[BLE] visit -> {:04x}", target);
                     central_visit(&stack, &mut central, &sh, target).await;
+                    {
+                        let mut s = sh.borrow_mut();
+                        s.pair_code = None;
+                        s.pair_answer = None;
+                    }
                     println!("[BLE] visit ended {:04x}", target);
                     let mut s = sh.borrow_mut();
                     s.want = None;
@@ -574,6 +579,11 @@ mod driver {
         println!("[BLE] connected from {:04x}", peer);
         sh.borrow_mut().link = Some(peer);
         peripheral_session(server, &conn, sh, peer).await;
+        {
+            let mut s = sh.borrow_mut();
+            s.pair_code = None;
+            s.pair_answer = None;
+        }
         println!("[BLE] session ended {:04x}", peer);
         let mut s = sh.borrow_mut();
         s.link = None;
@@ -606,7 +616,10 @@ mod driver {
                             persist_bond(b);
                         }
                     }
-                    GattConnectionEvent::PairingFailed(e) => println!("[BLE] peripheral pairing failed {:?}", e),
+                    GattConnectionEvent::PairingFailed(e) => {
+                        println!("[BLE] peripheral pairing failed {:?}", e);
+                        break;
+                    }
                     GattConnectionEvent::BondLost => {
                         println!("[BLE] peripheral: peer lost bond");
                         forget_bond(&conn.raw().peer_identity().addr);
@@ -768,7 +781,10 @@ mod driver {
                             persist_bond(b);
                         }
                     }
-                    ConnectionEvent::PairingFailed(e) => println!("[BLE] central pairing failed {:?}", e),
+                    ConnectionEvent::PairingFailed(e) => {
+                        println!("[BLE] central pairing failed {:?}", e);
+                        break;
+                    }
                     ConnectionEvent::BondLost => {
                         println!("[BLE] central: peer lost bond");
                         forget_bond(&conn.peer_identity().addr);
