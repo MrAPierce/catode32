@@ -8,6 +8,12 @@ And lots of cute art.
 
 Take a look [at the wiki](https://github.com/moonbench/catode32/wiki) for a lot more information about how to build the project, care for your pet, and use all the various systems.
 
+### License
+
+It is permitted to create Catode32 devices for personal or educational use. However, the name "Catode32" is trademarked and commercial use is not allowed without prior permission.
+
+The [License](https://github.com/moonbench/catode32?tab=License-1-ov-file) provides further details.
+
 ---
 
 ### Quick Highlights
